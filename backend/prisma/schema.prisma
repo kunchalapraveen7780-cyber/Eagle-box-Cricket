@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String         @id @default(uuid())
+  name            String
+  email           String         @unique
+  password        String?
+  googleId        String?        @unique
+  phone           String?
+  role            String         @default("CUSTOMER") // CUSTOMER or ADMIN
+  membershipTier  String         @default("NONE") // NONE, SILVER, GOLD, PLATINUM
+  referralCode    String?        @unique
+  pointsBalance   Int            @default(0)
+  createdAt       DateTime       @default(now())
+  
+  bookings        Booking[]
+  referralsMade   Referral[]     @relation("Referrer")
+  referralsGot    Referral[]     @relation("Referred")
+  notifications   Notification[]
+}
+
+model Membership {
+  id              String   @id @default(uuid())
+  name            String
+  price           Float
+  durationDays    Int
+  benefitsJson    String
+}
+
+model Slot {
+  id          String   @id @default(uuid())
+  date        String   // YYYY-MM-DD
+  startTime   String   // HH:MM
+  endTime     String   // HH:MM
+  status      String   @default("AVAILABLE") // AVAILABLE, BOOKED
+  matchType   String?  // casual, tournament, corporate
+  price       Float
+  branchId    String?
+  
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  bookings    Booking[]
+}
+
+model Branch {
+  id           String   @id @default(uuid())
+  name         String
+  location     String
+  pricePerHour Float
+  slots        Slot[]
+}
+
+model Booking {
+  id           String   @id @default(uuid())
+  userId       String
+  slotId       String
+  status       String   @default("CONFIRMED") // PENDING, CONFIRMED, CANCELLED
+  amountPaid   Float
+  pointsEarned Int      @default(0)
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id])
+  slot         Slot     @relation(fields: [slotId], references: [id])
+}
+
+model Referral {
+  id            String   @id @default(uuid())
+  referrerId    String
+  referredId    String
+  pointsAwarded Int
+  createdAt     DateTime @default(now())
+  
+  referrer      User     @relation("Referrer", fields: [referrerId], references: [id])
+  referred      User     @relation("Referred", fields: [referredId], references: [id])
+}
+
+model Offer {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  discountPercent Float
+  validFrom       DateTime
+  validTo         DateTime
+  targetSegment   String   // ALL, SILVER, GOLD, PLATINUM
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id])
+}

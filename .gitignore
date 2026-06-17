@@ -1,0 +1,5 @@
+node_modules/
+.env
+project.zip
+.DS_Store
+dist/
