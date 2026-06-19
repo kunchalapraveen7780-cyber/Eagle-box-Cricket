@@ -20,7 +20,6 @@ const PremiumVenueCard = ({ branch, onImageClick }) => {
 
   useEffect(() => {
     let intervalId;
-    let ws;
 
     const fetchLiveAvailability = () => {
       api.get(`/api/branches/${branch.id}/live-availability`)
@@ -43,29 +42,8 @@ const PremiumVenueCard = ({ branch, onImageClick }) => {
     // Polling every 30 seconds
     intervalId = setInterval(fetchLiveAvailability, 30000);
 
-    // WebSocket listener for real-time slot updates
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'localhost:5000' 
-      : window.location.host;
-      
-    ws = new WebSocket(`${protocol}//${host}`);
-    
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'SLOT_UPDATE') {
-          // If a slot updates, fetch the latest availability
-          fetchLiveAvailability();
-        }
-      } catch (e) {
-        console.error('WS parse error:', e);
-      }
-    };
-
     return () => {
       clearInterval(intervalId);
-      if (ws) ws.close();
     };
   }, [branch.id]);
 
