@@ -139,7 +139,7 @@ export default function Login() {
 
         <div className="my-auto relative z-10 max-w-lg">
           <h2 className="text-4xl font-black tracking-tight text-[#0F172A] mb-5 leading-tight">
-            Book Premium Turf Grounds in Bangalore
+            Book Premium Turf Grounds in Hyderabad
           </h2>
           <p className="text-slate-500 text-base mb-10 leading-relaxed font-medium">
             Join the elite community of turf cricketers booking slots instantly. Earn loyalty points on every match and claim membership status.
@@ -170,7 +170,7 @@ export default function Login() {
         </div>
 
         <div className="relative z-10 text-slate-400 text-xs font-medium">
-          © 2026 Eagle Box Cricket. Made with ❤️ in Bangalore.
+          © 2026 Eagle Box Cricket. Made with ❤️ in Hyderabad.
         </div>
       </div>
 

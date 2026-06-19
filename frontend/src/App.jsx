@@ -10,6 +10,7 @@ import Register from "./pages/Register";
 import VenuesPage from "./pages/VenuesPage";
 import VenueDetailsPage from "./pages/VenueDetailsPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import MembershipSuccess from "./pages/MembershipSuccess";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID";
 
@@ -34,6 +35,7 @@ function App() {
               <Route path="/customer/bookings" element={<ProtectedRoute><CustomerDashboard /></ProtectedRoute>} />
               <Route path="/customer/rewards" element={<ProtectedRoute><CustomerDashboard /></ProtectedRoute>} />
               <Route path="/customer/profile" element={<ProtectedRoute><CustomerDashboard /></ProtectedRoute>} />
+              <Route path="/customer/membership/success" element={<ProtectedRoute><MembershipSuccess /></ProtectedRoute>} />
               
               <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="ADMIN"><AdminDashboard /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />

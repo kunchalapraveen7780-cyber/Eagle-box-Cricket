@@ -1,21 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { MapPin, Clock, ChevronLeft, Check, CreditCard, Tag, X, Loader2, Sparkles, Trophy } from 'lucide-react';
+import { MapPin, Clock, ChevronLeft, Check, CreditCard, Tag, Loader2, Sparkles, Trophy } from 'lucide-react';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
 import confetti from 'canvas-confetti';
+import MockPaymentModal from '../components/MockPaymentModal';
 
-const generateMockSlots = (price) => [
-  { id: 'm-ms1', startTime: '08:30 AM', endTime: '09:30 AM', status: 'AVAILABLE', price },
-  { id: 'm-ms2', startTime: '09:30 AM', endTime: '10:30 AM', status: 'BOOKED', price },
-  { id: 'm-ms3', startTime: '10:30 AM', endTime: '11:30 AM', status: 'AVAILABLE', price },
-  { id: 'm-ms4', startTime: '11:30 AM', endTime: '12:30 PM', status: 'AVAILABLE', price },
-  { id: 'e-ms1', startTime: '12:30 PM', endTime: '01:30 PM', status: 'AVAILABLE', price },
-  { id: 'e-ms2', startTime: '02:00 PM', endTime: '03:00 PM', status: 'BOOKED', price },
-  { id: 'e-ms3', startTime: '04:30 PM', endTime: '05:30 PM', status: 'AVAILABLE', price },
-  { id: 'e-ms4', startTime: '05:30 PM', endTime: '06:30 PM', status: 'AVAILABLE', price },
-  { id: 'e-ms5', startTime: '07:00 PM', endTime: '08:00 PM', status: 'AVAILABLE', price },
-];
+
 
 const SkeletonCard = () => (
   <div className="border border-slate-100 bg-white rounded-xl p-5 animate-pulse shadow-sm">
@@ -38,10 +29,13 @@ export default function SlotBookingFlow() {
   const [step, setStep] = useState(1);
   const [booking, setBooking] = useState(() => {
     const today = new Date();
-    const isoDate = today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const localDate = `${year}-${month}-${day}`;
     return {
       branch: null,
-      date: isoDate,
+      date: localDate,
       time: '',
       duration: 1,
       amount: 0,
@@ -62,6 +56,20 @@ export default function SlotBookingFlow() {
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [appliedCouponDetails, setAppliedCouponDetails] = useState(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  const [user] = useState(() => {
+    const userData = localStorage.getItem('user');
+    return userData ? JSON.parse(userData) : null;
+  });
+
+  // Calculate if user has prepaid slots available
+  const activeMemberships = user?.userMemberships?.filter(m => m.status === 'ACTIVE' && m.usedSlots < m.totalSlots) || [];
+  const hasPrepaidSlots = activeMemberships.length > 0;
+  const [selectedMembershipId, setSelectedMembershipId] = useState(null);
+  const [, setLockingSlot] = useState(false);
+  const [lockTimer, setLockTimer] = useState(-1);
+
 
   // New States for horizontal calendar and segmented switch
   const [datesList] = useState(() => {
@@ -73,12 +81,135 @@ export default function SlotBookingFlow() {
       const dayName = nextDate.toLocaleDateString('en-US', { weekday: 'short' });
       const dateNum = nextDate.getDate();
       const monthName = nextDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
-      const isoDate = nextDate.toISOString().split('T')[0];
-      dates.push({ dayName, dateNum, monthName, isoDate });
+      const y = nextDate.getFullYear();
+      const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+      const d = String(nextDate.getDate()).padStart(2, '0');
+      const localDate = `${y}-${m}-${d}`;
+      dates.push({ dayName, dateNum, monthName, isoDate: localDate });
     }
     return dates;
   });
-  const [timeSegment, setTimeSegment] = useState('morning'); // 'morning' | 'evening'
+
+  const selectedSlotIdRef = React.useRef(booking.slotId);
+  useEffect(() => {
+    selectedSlotIdRef.current = booking.slotId;
+  }, [booking.slotId]);
+
+  const isSlotExpired = (slotDate, startTimeStr) => {
+    try {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const currentDateStr = `${year}-${month}-${day}`;
+      
+      if (slotDate < currentDateStr) {
+        return true;
+      }
+      if (slotDate > currentDateStr) {
+        return false;
+      }
+
+      const timeParts = startTimeStr.trim().split(' ');
+      if (timeParts.length < 2) return false;
+      const time = timeParts[0];
+      const meridiem = timeParts[1].toUpperCase();
+      
+      const hourMin = time.split(':');
+      if (hourMin.length < 2) return false;
+      let hours = parseInt(hourMin[0]);
+      const minutes = parseInt(hourMin[1]);
+
+      if (meridiem === 'PM' && hours !== 12) {
+        hours += 12;
+      } else if (meridiem === 'AM' && hours === 12) {
+        hours = 0;
+      }
+
+      const slotTime = new Date();
+      slotTime.setHours(hours, minutes, 0, 0);
+
+      return today >= slotTime;
+    } catch (e) {
+      console.error("Error checking slot expiration:", e);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socketUrl = `${protocol}//${window.location.hostname}:5000`;
+    let ws;
+    let reconnectTimeout;
+
+    function connect() {
+      ws = new WebSocket(socketUrl);
+
+      ws.onopen = () => {
+        console.log("WebSocket connected for real-time slots");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'SLOT_UPDATE') {
+            const currentUserStr = localStorage.getItem('user');
+            const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+            const isOwnBooking = data.userId && currentUser && data.userId === currentUser.id;
+
+            setSlots(prevSlots => {
+              return prevSlots.map(s => {
+                if (s.id === data.slotId) {
+                  return { ...s, status: data.status };
+                }
+                return s;
+              });
+            });
+
+            if (data.status === 'BOOKED' && selectedSlotIdRef.current === data.slotId && !isOwnBooking) {
+              toast.error("The slot you selected was just booked by another user! Please select a different slot.");
+              setBooking(prev => ({ ...prev, slotId: '', time: '', amount: 0 }));
+            }
+          }
+        } catch (err) {
+          console.error("Error handling slot socket message:", err);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket disconnected, reconnecting in 3 seconds...");
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+
+    return () => {
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+      clearTimeout(reconnectTimeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    let interval;
+    if (lockTimer > 0) {
+      interval = setInterval(() => {
+        setLockTimer(prev => prev - 1);
+      }, 1000);
+    } else if (lockTimer === 0 && booking.slotId) {
+      const resetTimer = window.setTimeout(() => {
+        toast.error("Slot reservation expired.");
+        setBooking(prev => ({ ...prev, slotId: '', time: '', amount: 0 }));
+        setLockTimer(-1);
+        setStep(2); // go back to slot selection
+      }, 0);
+      return () => window.clearTimeout(resetTimer);
+    }
+    return () => clearInterval(interval);
+  }, [lockTimer, booking.slotId]);
 
   const handleBackClick = () => {
     if (step === 5) {
@@ -90,26 +221,22 @@ export default function SlotBookingFlow() {
 
   useEffect(() => {
     if (booking.date) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoadingSlots(true);
+      const loadingTimer = window.setTimeout(() => setLoadingSlots(true), 0);
       const url = booking.branch?.id 
         ? `/api/slots?date=${booking.date}&branchId=${booking.branch.id}` 
         : `/api/slots?date=${booking.date}`;
       api.get(url)
         .then(res => {
-          if (res.data && res.data.length > 0) {
-            setSlots(res.data);
-          } else {
-            setSlots(generateMockSlots(booking.branch?.pricePerHour || 1000));
-          }
+          setSlots(res.data || []);
         })
         .catch(err => {
           console.error("Error fetching slots:", err);
-          setSlots(generateMockSlots(booking.branch?.pricePerHour || 1000));
+          setSlots([]);
         })
         .finally(() => {
           setLoadingSlots(false);
         });
+      return () => window.clearTimeout(loadingTimer);
     }
   }, [booking.date, booking.branch?.id, booking.branch?.pricePerHour]);
 
@@ -122,10 +249,10 @@ export default function SlotBookingFlow() {
       .catch(err => {
         console.error("Error fetching branches:", err);
         setBranchesList([
-          { id: 'indiranagar', name: 'Eagle Box Cricket Indiranagar', location: 'Indiranagar, Bengaluru', pricePerHour: 1200 },
-          { id: 'koramangala', name: 'Eagle Box Cricket Koramangala', location: 'Koramangala, Bengaluru', pricePerHour: 1000 },
-          { id: 'hsr', name: 'Eagle Box Cricket HSR Layout', location: 'HSR Layout, Bengaluru', pricePerHour: 1500 },
-          { id: 'whitefield', name: 'Eagle Box Cricket Whitefield', location: 'Whitefield, Bengaluru', pricePerHour: 1100 }
+          { id: 'nagole', name: 'Eagle Box Nagole', location: 'Nagole, Hyderabad', pricePerHour: 800 },
+          { id: 'uppal', name: 'Eagle Box Uppal', location: 'Uppal, Hyderabad', pricePerHour: 900 },
+          { id: 'gachibowli', name: 'Eagle Box Gachibowli', location: 'Gachibowli, Hyderabad', pricePerHour: 1500 },
+          { id: 'kukatpally', name: 'Eagle Box Kukatpally', location: 'Kukatpally, Hyderabad', pricePerHour: 1200 }
         ]);
         setLoadingBranches(false);
       });
@@ -141,8 +268,13 @@ export default function SlotBookingFlow() {
         localStorage.removeItem('pending_booking');
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setBooking(parsedBooking);
-        setStep(5);
-        toast.success("Welcome back! Continuing your slot reservation.");
+        
+        if (parsedBooking.time && parsedBooking.slotId) {
+          setStep(5);
+          toast.success("Welcome back! Continuing your slot reservation.");
+        } else {
+          setStep(2);
+        }
       } catch (e) {
         console.error("Failed parsing pending booking", e);
       }
@@ -171,31 +303,42 @@ export default function SlotBookingFlow() {
     if (step === 1) nextStep();
   };
 
-  const handleTimeSelect = (slotId, timeString) => {
-    const basePrice = booking.branch?.pricePerHour || 1000;
-    setBooking(prev => ({ 
-      ...prev, 
-      slotId, 
-      time: timeString, 
-      amount: basePrice * prev.duration 
-    }));
-    setDiscount(0);
-    setIsCouponApplied(false);
-    setAppliedCouponDetails(null);
-    setCouponCode('');
-  };
+  const handleTimeSelect = async (slotId, timeString) => {
+    if (booking.slotId && booking.slotId !== slotId) {
+      try { await api.delete(`/api/slots/${booking.slotId}/lock`); } catch { console.debug("Unable to release previous slot lock"); }
+    }
 
-  const handleDurationSelect = (duration) => {
+    setLockingSlot(true);
     const basePrice = booking.branch?.pricePerHour || 1000;
-    setBooking(prev => ({ 
-      ...prev, 
-      duration, 
-      amount: basePrice * duration 
-    }));
-    setDiscount(0);
-    setIsCouponApplied(false);
-    setAppliedCouponDetails(null);
-    setCouponCode('');
+    
+    try {
+      const res = await api.post(`/api/slots/${slotId}/lock`, {
+        date: booking.date,
+        time: timeString,
+        branchId: booking.branch?.id,
+        price: basePrice * booking.duration
+      });
+      
+      const realSlotId = res.data.realSlotId || slotId;
+      setBooking(prev => ({ 
+        ...prev, 
+        slotId: realSlotId, 
+        time: timeString, 
+        amount: basePrice * booking.duration 
+      }));
+      setLockTimer(300); // 5 minutes
+      setDiscount(0);
+      setIsCouponApplied(false);
+      setAppliedCouponDetails(null);
+      setCouponCode('');
+      toast.success("Slot reserved for 5 minutes!");
+    } catch (err) {
+      toast.dismiss();
+      toast.error(err.response?.data?.error || err.message || "Failed to lock slot. Someone else might be booking it.");
+      setBooking(prev => ({ ...prev, slotId: '', time: '', amount: 0 }));
+    } finally {
+      setLockingSlot(false);
+    }
   };
 
   const handleApplyCoupon = async () => {
@@ -228,7 +371,7 @@ export default function SlotBookingFlow() {
     toast.success('Coupon removed.');
   };
 
-  const handleConfirmBooking = async () => {
+  const handleInitiatePayment = () => {
     const userData = localStorage.getItem('user');
     const token = localStorage.getItem('token');
     if (!userData || !token) {
@@ -236,28 +379,69 @@ export default function SlotBookingFlow() {
       return;
     }
 
-    const finalAmount = booking.amount - discount;
+    if (selectedMembershipId || (booking.amount - discount <= 0)) {
+      // Direct booking if 0 cost
+      handlePaymentSuccess();
+    } else {
+      setShowPaymentModal(true);
+    }
+  };
+
+  const handlePaymentSuccess = async () => {
+    setShowPaymentModal(false);
     setIsConfirming(true);
+
+    const baseAmount = booking.amount;
+    let finalAmount = baseAmount;
+    let appliedDiscount = 0;
+
+    if (selectedMembershipId) {
+      finalAmount = 0;
+      appliedDiscount = baseAmount;
+    } else if (isCouponApplied) {
+      appliedDiscount = discount;
+      finalAmount = Math.max(0, baseAmount - appliedDiscount);
+    }
 
     try {
       const res = await api.post('/api/bookings', {
         slotId: booking.slotId,
         amountPaid: finalAmount,
-        couponApplied: isCouponApplied ? appliedCouponDetails?.code : null
+        discountApplied: appliedDiscount,
+        date: booking.date,
+        time: booking.time,
+        branchId: booking.branch.id,
+        userMembershipId: selectedMembershipId
       });
 
       const newBookingId = res.data.id;
-      setBooking(prev => ({ ...prev, bookingId: newBookingId }));
-      
+      const pointsEarned = res.data.pointsEarned || 50;
+      setBooking(prev => ({ 
+        ...prev, 
+        bookingId: newBookingId,
+        finalAmountPaid: finalAmount,
+        pointsEarned: pointsEarned,
+        membershipUsed: !!selectedMembershipId
+      }));
+      const userData = localStorage.getItem('user');
       const userObj = JSON.parse(userData);
-      const pointsEarned = res.data.pointsEarned || Math.floor(finalAmount / 10);
+      
+      // Update local slots used if applicable
+      if (selectedMembershipId && userObj.userMemberships) {
+        const membership = userObj.userMemberships.find(m => m.id === selectedMembershipId);
+        if (membership) {
+          membership.usedSlots += 1;
+        }
+      }
+      
       userObj.pointsBalance += pointsEarned;
       localStorage.setItem('user', JSON.stringify(userObj));
 
       toast.success("Reservation confirmed!");
       setStep(6);
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to complete reservation. Try another slot.');
+      toast.dismiss();
+      toast.error(err.response?.data?.error || err.message || 'Failed to complete reservation. Try another slot.');
     } finally {
       setIsConfirming(false);
     }
@@ -437,72 +621,97 @@ export default function SlotBookingFlow() {
               </div>
             </div>
 
-            {/* Duration Step-Counter Selector */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-6 border-t border-b border-slate-100 bg-[#FAFAF9]/50 px-6 rounded-2xl">
-              <div>
-                <h3 className="text-base font-black text-[#0F172A]">Duration</h3>
-                <p className="text-xs text-slate-400 font-semibold mt-0.5">Duration of the slots</p>
-              </div>
+
+
+            {/* Occupancy and Stats */}
+            {slots.length > 0 && !loadingSlots && (() => {
+              const totalSlots = slots.length;
+              let bookedCount = 0;
+              let availableCount = 0;
+              let expiredCount = 0;
+              slots.forEach(s => {
+                if (s.status === 'BOOKED') bookedCount++;
+                else if (isSlotExpired(booking.date, s.startTime)) expiredCount++;
+                else if (s.status === 'AVAILABLE') availableCount++;
+              });
+
+              console.log(`
+[Slot Debug Info]
+Selected Branch: ${booking.branch?.name || 'None'}
+Selected Date: ${booking.date}
+Total Slots Returned: ${totalSlots}
+Available Count: ${availableCount}
+Booked Count: ${bookedCount}
+Expired Count: ${expiredCount}
+              `);
+
+              const percentOccupied = totalSlots > 0 ? Math.round((bookedCount / totalSlots) * 100) : 0;
               
-              <div className="flex items-center bg-[#0F172A] text-white rounded-xl p-1.5 shadow-sm">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    if (booking.duration > 0.5) {
-                      handleDurationSelect(booking.duration - 0.5);
-                    }
-                  }}
-                  className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-lg font-black transition-colors border-none text-white cursor-pointer text-lg animate-none"
-                >
-                  −
-                </button>
-                <span className="px-5 text-sm font-black tracking-wide min-w-[75px] text-center">
-                  {booking.duration} hr
-                </span>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    if (booking.duration < 4.0) {
-                      handleDurationSelect(booking.duration + 0.5);
-                    }
-                  }}
-                  className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-lg font-black transition-colors border-none text-white cursor-pointer text-lg animate-none"
-                >
-                  +
-                </button>
+              return (
+                <div className="space-y-6 pt-6 border-t border-slate-100">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-2xl">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Slots</div>
+                      <div className="text-xl font-black text-slate-800 flex items-center gap-2 mt-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span> {totalSlots}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-2xl">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Available</div>
+                      <div className="text-xl font-black text-slate-800 flex items-center gap-2 mt-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#22C55E]"></span> {availableCount}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-2xl">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Booked</div>
+                      <div className="text-xl font-black text-slate-800 flex items-center gap-2 mt-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]"></span> {bookedCount}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-2xl">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Remaining</div>
+                      <div className="text-xl font-black text-[#16A34A] flex items-center gap-2 mt-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]"></span> {availableCount}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60">
+                    <div className="flex justify-between text-xs font-bold text-slate-600 mb-2">
+                      <span>Occupancy Rate</span>
+                      <span>{percentOccupied}% Occupied</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                      <div className="bg-slate-800 h-full rounded-full transition-all duration-500" style={{ width: `${percentOccupied}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Status Legend */}
+            <div className="flex flex-wrap items-center justify-center gap-6 py-4 px-6 bg-slate-50 border border-slate-200/60 rounded-2xl text-xs font-bold text-slate-600">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm bg-[#22C55E] border border-green-600/25"></span>
+                <span>Available</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm bg-[#EF4444] border border-red-600/25"></span>
+                <span>Booked</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm bg-[#F59E0B] border border-amber-500/25"></span>
+                <span>Selected</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm bg-slate-200 border border-slate-300"></span>
+                <span>Expired</span>
               </div>
             </div>
 
-            {/* Morning / Evening Switcher Tab */}
-            <div className="space-y-4">
-              <div className="relative w-full bg-slate-100 p-1.5 rounded-2xl flex items-center border border-slate-200/50">
-                <button
-                  type="button"
-                  onClick={() => setTimeSegment('morning')}
-                  className={`flex-1 text-center py-3 text-sm font-black rounded-xl transition-all cursor-pointer border-none z-10 ${
-                    timeSegment === 'morning'
-                      ? 'bg-white text-[#0F172A] border border-[#0F172A] shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  Morning
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTimeSegment('evening')}
-                  className={`flex-1 text-center py-3 text-sm font-black rounded-xl transition-all cursor-pointer border-none z-10 ${
-                    timeSegment === 'evening'
-                      ? 'bg-white text-[#0F172A] border border-[#0F172A] shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  Evening
-                </button>
-              </div>
-
-              {/* Slot Cards List */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
               {loadingSlots ? (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <SlotSkeleton />
                   <SlotSkeleton />
                   <SlotSkeleton />
@@ -513,60 +722,69 @@ export default function SlotBookingFlow() {
                   No slots available for this branch on the selected date. Check admin panel schedule.
                 </div>
               ) : (
-                (() => {
-                  // Filter morning / evening slots based on start time string
-                  const filteredSlots = slots.filter(s => {
-                    const startPart = s.startTime.split('-')[0].trim();
-                    const isAM = startPart.includes('AM');
-                    const hour = parseInt(startPart.split(':')[0]);
-                    const isMorning = isAM && (hour !== 12); // 12 AM is midnight, 12 PM is noon
-                    return timeSegment === 'morning' ? isMorning : !isMorning;
-                  });
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {(() => {
+                    const parseTime = (timeStr) => {
+                      const timeParts = timeStr.trim().split(' ');
+                      if (timeParts.length < 2) return 0;
+                      const time = timeParts[0];
+                      const meridiem = timeParts[1].toUpperCase();
+                      const hourMin = time.split(':');
+                      let hours = parseInt(hourMin[0]);
+                      const minutes = parseInt(hourMin[1]);
+                      if (meridiem === 'PM' && hours !== 12) hours += 12;
+                      else if (meridiem === 'AM' && hours === 12) hours = 0;
+                      return hours * 60 + minutes;
+                    };
+                    const sortedSlots = [...slots].sort((a, b) => parseTime(a.startTime) - parseTime(b.startTime));
+                    return sortedSlots.map(s => {
+                    const isBooked = s.status === 'BOOKED';
+                    const isLocked = s.status === 'LOCKED';
+                    const isExpired = isSlotExpired(booking.date, s.startTime);
+                    const isSelected = booking.slotId === s.id;
+                    
+                    const currentUserStr = localStorage.getItem('user');
+                    const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+                    const isOwnLock = isLocked && s.lockedBy === currentUser?.id;
+                    
+                    const timeStr = `${s.startTime} - ${s.endTime}`;
+                    
+                    let buttonClass;
+                    let isBtnDisabled = false;
+                    let extraLabel = null;
 
-                  if (filteredSlots.length === 0) {
+                    if (isExpired) {
+                      buttonClass = "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60 line-through";
+                      isBtnDisabled = true;
+                    } else if (isBooked) {
+                      buttonClass = "bg-[#EF4444] border-[#DC2626] text-white cursor-not-allowed opacity-90";
+                      isBtnDisabled = true;
+                    } else if (isSelected || isOwnLock) {
+                      buttonClass = "bg-[#F59E0B] border-[#D97706] text-white shadow-md transform scale-[1.02] font-black";
+                    } else if (isLocked) {
+                      buttonClass = "bg-yellow-400 border-yellow-500 text-yellow-900 cursor-not-allowed opacity-90 flex-col justify-center items-center";
+                      isBtnDisabled = true;
+                      extraLabel = <span className="text-[8px] uppercase font-bold mt-1 bg-yellow-500/30 px-1.5 py-0.5 rounded shadow-sm text-yellow-900">Booking in Progress</span>;
+                    } else {
+                      buttonClass = "bg-[#22C55E] border-[#16A34A] text-white hover:bg-[#16A34A] shadow-sm hover:shadow-md transition-all";
+                    }
+
                     return (
-                      <div className="text-center py-12 bg-slate-50 border border-slate-200 rounded-xl text-[#0F172A] text-xs font-semibold">
-                        No {timeSegment} slots available. Try selecting another date.
-                      </div>
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={isBtnDisabled}
+                        onClick={() => handleTimeSelect(s.id, timeStr)}
+                        className={`py-4 px-2 rounded-xl border text-center flex flex-col items-center justify-center cursor-pointer select-none ${buttonClass}`}
+                      >
+                        <span className="font-bold text-xs sm:text-sm tracking-tight block">{s.startTime}</span>
+                        <span className="text-[10px] opacity-80 block my-0.5">to</span>
+                        <span className="font-bold text-xs sm:text-sm tracking-tight block">{s.endTime}</span>
+                        {extraLabel}
+                      </button>
                     );
-                  }
-
-                  return (
-                    <div className={`grid gap-4 ${
-                      timeSegment === 'morning'
-                        ? 'grid-cols-2 sm:grid-cols-3'
-                        : 'grid-cols-2'
-                    }`}>
-                      {filteredSlots.map(s => {
-                        const isBooked = s.status === 'BOOKED';
-                        const isSelected = booking.slotId === s.id;
-                        const timeStr = `${s.startTime} - ${s.endTime}`;
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            disabled={isBooked}
-                            onClick={() => handleTimeSelect(s.id, timeStr)}
-                            className={`py-6 px-4 rounded-2xl border text-center transition-all flex flex-col items-center justify-center cursor-pointer select-none ${
-                              isBooked
-                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed line-through'
-                                : isSelected
-                                  ? 'bg-[#0F172A] text-white border-[#0F172A] shadow-sm transform scale-[1.01]'
-                                  : 'bg-white border-slate-200 text-slate-800 hover:border-slate-400 hover:bg-slate-50'
-                            }`}
-                          >
-                            <span className="font-extrabold text-sm sm:text-base tracking-tight">{timeStr}</span>
-                            <span className={`text-[10px] font-bold mt-1.5 uppercase tracking-wider ${
-                              isSelected ? 'text-white/80' : 'text-slate-400'
-                            }`}>
-                              1 turf available
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  );
-                })()
+                  })})()}
+                </div>
               )}
             </div>
 
@@ -591,6 +809,17 @@ export default function SlotBookingFlow() {
               <Sparkles className="w-5 h-5 text-[#22C55E]" /> Booking Summary
             </h2>
             
+            {lockTimer >= 0 && (
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl mb-6 flex justify-between items-center shadow-sm">
+                <div className="flex items-center gap-2 text-amber-800">
+                  <span className="font-bold text-sm">Slot Locked for You</span>
+                </div>
+                <div className="bg-amber-100 text-amber-900 font-black px-3 py-1 rounded shadow-sm text-lg tabular-nums">
+                  {Math.floor(lockTimer / 60).toString().padStart(2, '0')}:{(lockTimer % 60).toString().padStart(2, '0')}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4 mb-8">
               <div className="flex justify-between items-center text-sm border-b border-slate-100 pb-3">
                 <span className="text-slate-500">Branch Ground</span>
@@ -615,65 +844,100 @@ export default function SlotBookingFlow() {
                 <span className="font-extrabold text-slate-900">₹{booking.branch?.pricePerHour || 1000} / hour</span>
               </div>
 
-              <div className="pt-4 flex justify-between items-end">
+              <div className="pt-4 flex justify-between items-end border-b border-slate-100 pb-4">
                 <div>
-                  <span className="text-slate-900 font-extrabold text-base">Total Turf Amount</span>
-                  <div className="text-[10px] text-slate-400 font-semibold uppercase mt-0.5">₹{booking.branch?.pricePerHour || 1000} × {booking.duration} hr</div>
+                  <span className="text-slate-900 font-extrabold text-base">Original Amount</span>
                 </div>
-                <span className={`text-xl font-black ${isCouponApplied ? 'line-through text-slate-400' : 'text-[#16A34A]'}`}>
+                <span className={`text-xl font-black ${(selectedMembershipId || isCouponApplied) ? 'line-through text-slate-400' : 'text-[#16A34A]'}`}>
                   ₹{booking.amount}
                 </span>
               </div>
 
-              {isCouponApplied && (
-                <div className="flex justify-between items-center text-[#16A34A] font-bold text-sm bg-green-50 border border-green-200/50 rounded-xl px-4 py-2.5 mt-2 animate-fadeIn">
-                  <span className="flex items-center gap-1.5 text-xs uppercase tracking-wider">
-                    <Tag size={14} className="text-[#16A34A]" /> Applied: {appliedCouponDetails?.code}
+              {hasPrepaidSlots && (
+                <div className="py-4 border-b border-slate-100">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="font-extrabold text-slate-900 text-sm">Memberships Available</span>
+                  </div>
+                  <div className="text-sm font-bold text-slate-600 mb-2">Choose Booking Method:</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {activeMemberships.map(m => (
+                      <label key={m.id} className={`flex flex-col p-3 border rounded-xl cursor-pointer transition-all ${selectedMembershipId === m.id ? 'border-green-500 bg-green-50 ring-1 ring-green-500' : 'border-slate-200 hover:border-green-300'}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <input type="radio" name="bookingMethod" checked={selectedMembershipId === m.id} onChange={() => setSelectedMembershipId(m.id)} className="text-green-600 focus:ring-green-500" />
+                          <span className="font-bold text-slate-900">{m.tier} ({m.totalSlots - m.usedSlots} Left)</span>
+                        </div>
+                        <span className="text-xs text-slate-500 ml-6">Cost: ₹0 | Expires: {new Date(m.expiryDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}</span>
+                      </label>
+                    ))}
+                    <label className={`flex flex-col p-3 border rounded-xl cursor-pointer transition-all ${!selectedMembershipId ? 'border-green-500 bg-green-50 ring-1 ring-green-500' : 'border-slate-200 hover:border-green-300'}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <input type="radio" name="bookingMethod" checked={!selectedMembershipId} onChange={() => setSelectedMembershipId(null)} className="text-green-600 focus:ring-green-500" />
+                        <span className="font-bold text-slate-900">Pay Normally</span>
+                      </div>
+                      <span className="text-xs text-slate-500 ml-6">Cost: ₹{booking.amount}</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {(!selectedMembershipId) && (
+                <div className="pt-4 pb-4 border-b border-slate-100">
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Enter Coupon Code" 
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      disabled={isCouponApplied || isValidatingCoupon}
+                      className="flex-1 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold uppercase disabled:opacity-50"
+                    />
+                    {isCouponApplied ? (
+                      <button onClick={handleRemoveCoupon} className="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-sm font-bold border border-red-200 hover:bg-red-100 transition-colors">
+                        Remove
+                      </button>
+                    ) : (
+                      <button onClick={handleApplyCoupon} disabled={!couponCode || isValidatingCoupon} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 disabled:opacity-50 transition-colors">
+                        {isValidatingCoupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedMembershipId && (
+                <div className="flex justify-between items-center text-[#16A34A] font-bold text-sm bg-green-50 border border-green-200/50 rounded-xl px-4 py-3 mt-4 animate-fadeIn">
+                  <span className="flex flex-col">
+                    <span className="flex items-center gap-1.5 text-xs uppercase tracking-wider font-black">
+                      <Trophy size={14} className="text-[#16A34A]" /> {activeMemberships.find(m => m.id === selectedMembershipId)?.tier} Plan
+                    </span>
+                    <span className="text-[10px] text-green-700 mt-0.5">1 Prepaid Slot Applied</span>
                   </span>
-                  <span>-₹{discount}</span>
+                  <span className="text-lg">-₹{booking.amount}</span>
                 </div>
               )}
 
-              {isCouponApplied && (
-                <div className="border-t border-dashed border-slate-200 pt-4 flex justify-between items-center mt-3">
-                  <span className="text-slate-900 font-black text-lg">Net Payable Amount</span>
-                  <span className="text-2xl font-black text-[#16A34A] shadow-sm">₹{booking.amount - discount}</span>
+              {(!selectedMembershipId) && isCouponApplied && (
+                <div className="flex justify-between items-center text-[#16A34A] font-bold text-sm bg-green-50 border border-green-200/50 rounded-xl px-4 py-3 mt-4 animate-fadeIn">
+                  <span className="flex flex-col">
+                    <span className="flex items-center gap-1.5 text-xs uppercase tracking-wider font-black">
+                      <Tag size={14} className="text-[#16A34A]" /> {appliedCouponDetails?.code}
+                    </span>
+                    <span className="text-[10px] text-green-700 mt-0.5">Coupon Discount Applied</span>
+                  </span>
+                  <span className="text-lg">-₹{discount}</span>
                 </div>
               )}
-            </div>
 
-            <div className="border-t border-slate-100 pt-5 mb-6">
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Promo Code Discount</label>
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  disabled={isCouponApplied}
-                  placeholder="e.g. WELCOME10"
-                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-bold uppercase outline-none focus:ring-1 focus:ring-[#22C55E] text-xs disabled:opacity-50"
-                />
-                {isCouponApplied ? (
-                  <button 
-                    onClick={handleRemoveCoupon}
-                    className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-200 rounded-xl transition-colors flex items-center gap-1 shrink-0 cursor-pointer text-xs"
-                  >
-                    <X size={14} /> Remove
-                  </button>
-                ) : (
-                  <button 
-                    onClick={handleApplyCoupon}
-                    disabled={isValidatingCoupon || !couponCode}
-                    className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold rounded-xl transition-all disabled:opacity-50 shrink-0 cursor-pointer text-xs"
-                  >
-                    {isValidatingCoupon ? 'Validating...' : 'Apply Code'}
-                  </button>
-                )}
+              <div className="border-t border-dashed border-slate-200 pt-4 flex justify-between items-center mt-3">
+                <span className="text-slate-900 font-black text-lg">Net Payable Amount</span>
+                <span className="text-3xl font-black text-[#16A34A] shadow-sm">
+                  ₹{selectedMembershipId ? 0 : Math.max(0, booking.amount - discount)}
+                </span>
               </div>
             </div>
 
             <button 
-              onClick={handleConfirmBooking}
+              onClick={handleInitiatePayment}
               disabled={isConfirming}
               className="w-full bg-[#22C55E] hover:bg-[#16A34A] disabled:opacity-50 text-white font-black text-sm py-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
             >
@@ -724,9 +988,19 @@ export default function SlotBookingFlow() {
                   <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Time Slot</span>
                   <span className="font-extrabold text-slate-800 text-xs">{booking.time}</span>
                 </div>
+                <div className="flex justify-between border-b border-slate-200/60 pb-2.5">
+                  <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Amount Paid</span>
+                  <span className="font-extrabold text-slate-800 text-xs">₹{booking.finalAmountPaid}</span>
+                </div>
+                {booking.membershipUsed && (
+                  <div className="flex justify-between border-b border-slate-200/60 pb-2.5">
+                    <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Membership Used</span>
+                    <span className="font-extrabold text-[#16A34A] text-xs">1 Prepaid Slot</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Status</span>
-                  <span className="font-black text-xs text-[#16A34A] bg-[#22C55E]/10 border border-[#22C55E]/20 rounded-full px-2.5 py-0.5">Confirmed</span>
+                  <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Points Earned</span>
+                  <span className="font-black text-xs text-[#F59E0B] bg-amber-50 border border-amber-200/50 rounded-full px-2.5 py-0.5">+{booking.pointsEarned} Pts</span>
                 </div>
               </div>
             </div>
@@ -784,6 +1058,16 @@ export default function SlotBookingFlow() {
           </div>
         </div>
       )}
+
+      {showPaymentModal && (
+        <MockPaymentModal 
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={handlePaymentSuccess}
+          amount={selectedMembershipId ? 0 : Math.max(0, booking.amount - discount)}
+        />
+      )}
+
     </div>
   );
 }

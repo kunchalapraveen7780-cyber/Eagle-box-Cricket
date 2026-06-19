@@ -29,9 +29,9 @@ router.post("/login", async (req, res) => {
     return res.status(400).json({ error: validation.error.errors[0].message });
   }
   const { email, password } = validation.data;
-  
+
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email }, include: { userMemberships: true } });
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     // If user registered via Google, they might not have a password
@@ -41,7 +41,7 @@ router.post("/login", async (req, res) => {
     if (!isValid) return res.status(401).json({ error: "Invalid credentials" });
 
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
-    
+
     // Omit password from response
     const { password: _, ...userData } = user;
     res.json({ token, user: userData });
@@ -76,14 +76,14 @@ router.post("/register", async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     // basic referral code generation
     const referralCode = name.replace(/\s+/g, "").toUpperCase().substring(0, 4) + Math.floor(Math.random() * 10000);
-    
+
     const user = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
-        data: { 
-          name, 
-          email, 
-          password: hashed, 
-          phone, 
+        data: {
+          name,
+          email,
+          password: hashed,
+          phone,
           referralCode,
           pointsBalance: referrer ? 50 : 0
         }
@@ -143,12 +143,12 @@ router.post("/google-login", async (req, res) => {
       verifyOptions.audience = process.env.GOOGLE_CLIENT_ID;
     }
     const ticket = await googleClient.verifyIdToken(verifyOptions);
-    
+
     const payload = ticket.getPayload();
     const { sub: googleId, email, name } = payload;
 
     // Check if user exists
-    let user = await prisma.user.findUnique({ where: { email } });
+    let user = await prisma.user.findUnique({ where: { email }, include: { userMemberships: true } });
 
     if (user) {
       // If user exists but doesn't have a googleId, update it (linking accounts)
@@ -172,7 +172,7 @@ router.post("/google-login", async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
-    
+
     const { password: _, ...userData } = user;
     res.json({ token, user: userData });
 
@@ -185,7 +185,8 @@ router.post("/google-login", async (req, res) => {
 router.get("/profile", authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.user.userId }
+      where: { id: req.user.userId },
+      include: { userMemberships: true }
     });
     if (!user) return res.status(404).json({ error: "User not found" });
     const { password: _, ...userData } = user;
@@ -204,7 +205,7 @@ router.patch("/profile", authenticateToken, async (req, res) => {
       where: { id: req.user.userId },
       data: { name, phone }
     });
-    
+
     await prisma.notification.create({
       data: {
         userId: req.user.userId,
@@ -218,6 +219,81 @@ router.patch("/profile", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("Profile Update Error:", err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/membership/purchase", authenticateToken, async (req, res) => {
+  const { amountPaid, tier } = req.body;
+  if (!amountPaid || !tier) return res.status(400).json({ error: "Missing purchase details" });
+
+  try {
+    const today = new Date();
+    const expiry = new Date();
+    let totalSlots = 0;
+
+    switch (tier) {
+      case "STARTER":
+        expiry.setMonth(today.getMonth() + 1);
+        totalSlots = 4;
+        break;
+      case "PRO":
+        expiry.setMonth(today.getMonth() + 3);
+        totalSlots = 12;
+        break;
+      case "ELITE":
+        expiry.setMonth(today.getMonth() + 6);
+        totalSlots = 37;
+        break;
+      case "CHAMPION":
+        expiry.setFullYear(today.getFullYear() + 1); // 12 months
+        totalSlots = 50;
+        break;
+      default:
+        return res.status(400).json({ error: "Invalid membership tier" });
+    }
+
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      // Create new membership
+      await tx.userMembership.create({
+        data: {
+          userId: req.user.userId,
+          tier,
+          totalSlots,
+          expiryDate: expiry
+        }
+      });
+
+      // Update total spent
+      return tx.user.update({
+        where: { id: req.user.userId },
+        data: { totalSpent: { increment: amountPaid } },
+        include: { userMemberships: true }
+      });
+    });
+
+    await prisma.notification.create({
+      data: {
+        userId: req.user.userId,
+        message: `Congratulations! You are now a ${tier} member with ${totalSlots} prepaid slots until ${expiry.toLocaleDateString()}.`,
+        type: "UPGRADE"
+      }
+    });
+
+    // Send Membership Purchase Email
+    if (updatedUser.email) {
+      const { sendEmail, templates } = require('../lib/email');
+      await sendEmail({
+        to: updatedUser.email,
+        subject: `Welcome to ${tier} Membership! - Eagle Box Cricket`,
+        html: templates.membershipPurchase(updatedUser.name, tier, amountPaid)
+      });
+    }
+
+    const { password: _, ...userData } = updatedUser;
+    res.json(userData);
+  } catch (err) {
+    console.error("Membership Purchase Error:", err);
+    res.status(500).json({ error: "Failed to process membership." });
   }
 });
 

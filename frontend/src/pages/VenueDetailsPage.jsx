@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { 
-  MapPin, Star, Calendar, Clock, Loader2, ArrowLeft, ShieldCheck, Info, Sparkles, Check, Play, User 
-} from 'lucide-react';
+import { MapPin, Star, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -28,7 +26,12 @@ export default function VenueDetailsPage() {
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error("Failed to parse user", e);
+      }
     }
 
     // Load DB branches to match ID
@@ -50,7 +53,7 @@ export default function VenueDetailsPage() {
   // Load slots for selected date & matched branch
   useEffect(() => {
     if (dbBranch) {
-      setLoadingSlots(true);
+      const loadingTimer = window.setTimeout(() => setLoadingSlots(true), 0);
       api.get(`/api/slots?date=${selectedDate}&branchId=${dbBranch.id}`)
         .then(res => {
           setSlots(res.data);
@@ -70,6 +73,7 @@ export default function VenueDetailsPage() {
         .finally(() => {
           setLoadingSlots(false);
         });
+      return () => window.clearTimeout(loadingTimer);
     }
   }, [dbBranch, selectedDate]);
 
@@ -227,7 +231,6 @@ export default function VenueDetailsPage() {
   const info = venueDetails[id.toLowerCase()] || venueDetails.nagole;
 
   // Occupancy metrics calculations
-  const totalSlotsCount = slots.length;
   const availableSlotsCount = slots.filter(s => s.status === 'AVAILABLE').length;
   const bookedSlotsCount = slots.filter(s => s.status === 'BOOKED').length;
 

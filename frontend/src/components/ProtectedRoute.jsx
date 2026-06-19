@@ -26,13 +26,15 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     return <Navigate to="/login/customer" replace />;
   }
 
+  let parsedUser;
   try {
-    const parsedUser = JSON.parse(user);
-    if (requiredRole && parsedUser.role !== requiredRole) {
-      return <Navigate to="/" replace />;
-    }
+    parsedUser = JSON.parse(user);
   } catch {
     return <Navigate to="/login/customer" replace />;
+  }
+
+  if (requiredRole && parsedUser.role !== requiredRole) {
+    return <Navigate to="/customer/dashboard" replace />;
   }
 
   return children;

@@ -1,112 +1,109 @@
-import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { DollarSign, Calendar, Users, AlertCircle, LogOut, Loader2, TrendingUp, Plus, Trash } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { 
+  DollarSign, Calendar, Users, AlertCircle, LogOut, Loader2, TrendingUp, Download, Shield, MapPin, Award, Search, Menu, X, Clock, Activity, ListOrdered, Share2, Check, RefreshCw, MessageSquare, Bell, FileText, Table, Lock, Star
+} from "lucide-react";
 import api from "../lib/api";
 import toast from "react-hot-toast";
+import { generateExcel, generateCSV } from "../lib/exportUtils";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview"); // overview, bookings, users, slots
-  const [bookings, setBookings] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState("overview");
+
+  // Data states
+  const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [topCustomers, setTopCustomers] = useState([]);
+  const [venueAnalytics, setVenueAnalytics] = useState([]);
+  const [, setReferrals] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [slotLocks, setSlotLocks] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [supportStats, setSupportStats] = useState(null);
+  const [selectedSupportTicket, setSelectedSupportTicket] = useState(null);
+  const [adminTicketResponse, setAdminTicketResponse] = useState("");
+  const [membershipStats, setMembershipStats] = useState(null);
+  const [loyaltyStats, setLoyaltyStats] = useState(null);
+  const [commStats, setCommStats] = useState(null);
+
+  // Search/Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [loadingBookings, setLoadingBookings] = useState(false);
-  const [loadingUsers, setLoadingUsers] = useState(false);
 
-  // Slots, Branches, and Revenue chart states
-  const [revenueTrend, setRevenueTrend] = useState([]);
-  const [slots, setSlots] = useState([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [branches, setBranches] = useState([]);
-  const [showCreateSlotModal, setShowCreateSlotModal] = useState(false);
-  const [createSlotForm, setCreateSlotForm] = useState({
-    date: "",
-    startTime: "",
-    endTime: "",
-    price: "",
-    branchId: ""
-  });
-  const [isCreatingSlot, setIsCreatingSlot] = useState(false);
-
-  const fetchSlots = () => {
-    setLoadingSlots(true);
-    api.get("/api/slots")
-      .then((res) => {
-        setSlots(res.data);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch slots:", err);
-      })
-      .finally(() => {
-        setLoadingSlots(false);
-      });
-  };
-
-  const loadData = () => {
-    // Fetch stats
-    api.get("/api/admin/dashboard-stats")
-      .then((res) => {
-        setStats(res.data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch stats:", err);
-        toast.error("Failed to load dashboard statistics.");
-        setLoading(false);
-      });
-
-    // Fetch bookings
-    setLoadingBookings(true);
-    api.get("/api/admin/bookings")
-      .then((res) => {
-        setBookings(res.data);
-        setLoadingBookings(false);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch bookings:", err);
-        setLoadingBookings(false);
-      });
-
-    // Fetch users
-    setLoadingUsers(true);
-    api.get("/api/admin/users")
-      .then((res) => {
+  const loadActiveTabData = useCallback(async () => {
+    try {
+      if (activeTab === "overview") {
+        const [statsRes, topRes, venueRes] = await Promise.all([
+          api.get("/api/admin/dashboard-stats"),
+          api.get("/api/admin/loyalty-analytics").then(r => r), // to get top customers
+          api.get("/api/admin/venue-analytics")
+        ]);
+        setStats(statsRes.data);
+        setTopCustomers(topRes.data.topCustomers || []);
+        setVenueAnalytics(venueRes.data);
+      } else if (activeTab === "users") {
+        const res = await api.get("/api/admin/users");
         setUsers(res.data);
-        setLoadingUsers(false);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch users:", err);
-        setLoadingUsers(false);
-      });
-
-    // Fetch branches
-    api.get("/api/branches")
-      .then((res) => {
-        setBranches(res.data);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch branches:", err);
-      });
-
-    // Fetch live revenue trend
-    api.get("/api/admin/revenue-chart?days=7")
-      .then((res) => {
-        setRevenueTrend(res.data);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch revenue trend:", err);
-      });
-
-    fetchSlots();
-  };
+      } else if (activeTab === "bookings") {
+        const res = await api.get("/api/admin/bookings");
+        setBookings(res.data);
+      } else if (activeTab === "locks") {
+        const res = await api.get('/api/slots/admin/slot-locks');
+        setSlotLocks(res.data);
+      } else if (activeTab === "venues") {
+        const venueRes = await api.get("/api/admin/venue-analytics");
+        setVenueAnalytics(venueRes.data);
+      } else if (activeTab === "revenue") {
+        const res = await api.get("/api/admin/revenue-analytics");
+        setStats(res.data);
+      } else if (activeTab === "memberships") {
+        const res = await api.get("/api/admin/membership-analytics");
+        setMembershipStats(res.data);
+      } else if (activeTab === "loyalty") {
+        const [loyaltyRes, refRes] = await Promise.all([
+          api.get("/api/admin/loyalty-analytics"),
+          api.get("/api/admin/referrals")
+        ]);
+        setLoyaltyStats(loyaltyRes.data);
+        setReferrals(refRes.data);
+      } else if (activeTab === "reviews") {
+        const res = await api.get("/api/admin/reviews");
+        setReviews(res.data);
+      } else if (activeTab === "support") {
+        const res = await api.get("/api/admin/support-analytics");
+        setSupportStats(res.data);
+      } else if (activeTab === "audit") {
+        const res = await api.get("/api/admin/audit-logs");
+        setAuditLogs(res.data);
+      } else if (activeTab === "communications") {
+        const res = await api.get("/api/admin/communications-analytics");
+        setCommStats(res.data);
+      }
+    } catch (error) {
+      console.error("Failed to load active tab data", error);
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        navigate("/");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab, navigate]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const initialLoad = setTimeout(() => {
+      loadActiveTabData();
+    }, 0);
+    const interval = setInterval(loadActiveTabData, 30000); // 30s refresh for active tab
+    return () => {
+      clearTimeout(initialLoad);
+      clearInterval(interval);
+    };
+  }, [loadActiveTabData]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -115,595 +112,1117 @@ export default function AdminDashboard() {
     navigate("/");
   };
 
-  const handleStatusChange = (bookingId, newStatus) => {
-    api.patch(`/api/admin/bookings/${bookingId}/status`, { status: newStatus })
-      .then(() => {
-        toast.success(`Booking status updated to ${newStatus}!`);
-        loadData();
-      })
-      .catch((err) => {
-        toast.error(err.response?.data?.error || "Failed to update booking status.");
+  const handleSupportTicketUpdate = async (ticketId, status) => {
+    try {
+      await api.patch(`/api/support/admin/${ticketId}`, { 
+        status, 
+        adminResponse: adminTicketResponse || undefined 
       });
+      toast.success("Ticket updated successfully!");
+      setAdminTicketResponse("");
+      setSelectedSupportTicket(null);
+      loadActiveTabData();
+    } catch {
+      toast.error("Failed to update ticket");
+    }
   };
 
-  const handleCreateSlot = (e) => {
-    e.preventDefault();
-    setIsCreatingSlot(true);
-    api.post("/api/slots", {
-      date: createSlotForm.date,
-      startTime: createSlotForm.startTime,
-      endTime: createSlotForm.endTime,
-      price: createSlotForm.price,
-      branchId: createSlotForm.branchId || null
-    })
-    .then(() => {
-      toast.success("Slot created successfully!");
-      setShowCreateSlotModal(false);
-      setCreateSlotForm({ date: "", startTime: "", endTime: "", price: "", branchId: "" });
-      fetchSlots();
-      loadData();
-    })
-    .catch((err) => {
-      toast.error(err.response?.data?.error || "Failed to create slot.");
-    })
-    .finally(() => {
-      setIsCreatingSlot(false);
-    });
+  const handleStatusChange = async (bookingId, newStatus) => {
+    try {
+      await api.patch(`/api/admin/bookings/${bookingId}/status`, { status: newStatus });
+      toast.success(`Booking status updated to ${newStatus}`);
+      loadActiveTabData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to update status");
+    }
   };
 
-  const handleDeleteSlot = (slotId) => {
-    if (!window.confirm("Are you sure you want to delete this slot?")) return;
-    api.delete(`/api/slots/${slotId}`)
-      .then(() => {
-        toast.success("Slot deleted successfully!");
-        fetchSlots();
-        loadData();
-      })
-      .catch((err) => {
-        toast.error(err.response?.data?.error || "Failed to delete slot.");
-      });
+  const triggerExport = async (type, format) => {
+    const toastId = toast.loading("Generating Report...\nPlease wait...", { duration: 15000 });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout protection
+
+    try {
+      if (format === 'pdf') {
+        const res = await api.get(`/api/admin/export/${type}?format=pdf`, {
+          responseType: 'blob',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${type}_report.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode.removeChild(link);
+
+        toast.success("PDF generated successfully", { id: toastId });
+      } else {
+        const res = await api.get(`/api/admin/export/${type}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.data && res.data.success && res.data.data.length > 0) {
+          const data = res.data.data;
+          if (format === 'excel') {
+            generateExcel(data, type);
+          } else {
+            generateCSV(data, type);
+          }
+          
+          toast.success(`${format.toUpperCase()} generated successfully`, { id: toastId });
+        } else {
+          toast.error("No records available", { id: toastId });
+        }
+      }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      let errorMessage = "Failed to generate export";
+      if (err.response?.status === 404) {
+        errorMessage = "No records available";
+      } else if (err.name === 'CanceledError' || err.name === 'AbortError') {
+        errorMessage = "Export timed out";
+      } else if (err.response?.data) {
+        if (err.response.data instanceof Blob) {
+          try {
+            const text = await err.response.data.text();
+            const json = JSON.parse(text);
+            if (json.error) errorMessage = json.error;
+          } catch {
+            // parsing error
+          }
+        } else if (err.response.data.error) {
+          errorMessage = err.response.data.error;
+        }
+      }
+      toast.error(errorMessage, { id: toastId });
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="bg-[#F8FAFC] flex items-center justify-center">
-        <Loader2 className="w-10 h-10 animate-spin text-[#22C55E]" />
+  const sidebarContent = (
+    <div className={`fixed inset-y-0 left-0 bg-[#1A1A1A] text-white w-64 transform ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} transition-transform duration-300 z-50 lg:relative lg:translate-x-0 shadow-2xl flex flex-col`}>
+      <div className="p-6 flex items-center justify-between border-b border-white/10">
+        <h1 className="text-xl font-black tracking-tight">
+          <span className="text-[#22C55E]">EagleBox</span> Admin
+        </h1>
+        <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/50 hover:text-white">
+          <X className="w-5 h-5" />
+        </button>
       </div>
-    );
-  }
+      
+      <div className="flex-1 overflow-y-auto py-4">
+        <nav className="space-y-1 px-3">
+          {[
+            { id: "overview", name: "Overview", icon: Activity },
+            { id: "users", name: "User Analytics", icon: Users },
+            { id: "bookings", name: "Bookings", icon: Calendar },
+            { id: "locks", name: "Active Slot Locks", icon: Lock },
+            { id: "venues", name: "Venue Analytics", icon: MapPin },
+            { id: "revenue", name: "Revenue Dashboard", icon: TrendingUp },
+            { id: "memberships", name: "Memberships", icon: Award },
+            { id: "loyalty", name: "Loyalty & Referrals", icon: Share2 },
+            { id: "support", name: "Support Center", icon: MessageSquare },
+            { id: "reviews", name: "Player Reviews", icon: Star },
+            { id: "audit", name: "Audit Logs", icon: Shield },
+            { id: "export", name: "Export Reports", icon: Download },
+            { id: "communications", name: "Emails & Notifications", icon: Bell }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                activeTab === tab.id ? "bg-[#22C55E] text-white shadow-lg shadow-green-500/20" : "text-white/60 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <tab.icon className="w-5 h-5" />
+              {tab.name}
+            </button>
+          ))}
+        </nav>
+      </div>
+      
+      <div className="p-4 border-t border-white/10">
+        <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/10 transition-colors">
+          <LogOut className="w-5 h-5" /> Logout
+        </button>
+      </div>
+    </div>
+  );
+
+  const filteredBookings = bookings.filter(b => {
+    if (statusFilter !== "ALL" && b.status !== statusFilter) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return b.id.toLowerCase().includes(q) || 
+             b.user?.name?.toLowerCase().includes(q) || 
+             b.user?.email?.toLowerCase().includes(q) ||
+             b.slot?.branch?.name?.toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-[#0F172A]">
-      
-      {/* Navbar */}
-      <nav className="bg-white border-b border-slate-100 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="text-xl font-black tracking-tight flex items-center gap-1.5 text-slate-850">
-            <span className="text-[#22C55E]">EagleBox</span> Admin Console
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-250 hover:border-red-500/30 rounded-lg text-slate-700 hover:text-red-400 font-semibold transition-colors cursor-pointer text-xs"
-          >
-            <LogOut className="w-4 h-4" /> Logout
-          </button>
-        </div>
-      </nav>
+    <div className="flex h-screen bg-[#F5F5F0] overflow-hidden font-sans">
+      {sidebarContent}
 
-      {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-6 py-10 space-y-8">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight text-[#0F172A]">Admin Command Center</h1>
-          <p className="text-slate-500 text-xs mt-1">Real-time revenue metrics, player registrations, and slot scheduling.</p>
-        </div>
-
-        {/* 4 Stat Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white border border-slate-150 shadow-sm p-6 rounded-2xl flex items-center gap-4 hover:border-[#22C55E]/40 transition-colors duration-300 shadow-xl">
-            <div className="w-12 h-12 bg-green-500/10 text-[#22C55E] rounded-xl flex items-center justify-center shrink-0 border border-[#22C55E]/20">
-              <DollarSign className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Revenue</div>
-              <div className="text-2xl font-black text-slate-900 mt-0.5">₹{stats?.totalRevenue?.toLocaleString() || 0}</div>
-            </div>
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        <header className="bg-white border-b border-[#EEEDE8] h-16 flex items-center justify-between px-6 shadow-sm z-30">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-slate-600 hover:text-black">
+              <Menu className="w-6 h-6" />
+            </button>
+            <h2 className="text-lg font-black text-slate-800 capitalize tracking-tight">{activeTab.replace('-', ' ')}</h2>
           </div>
-
-          <div className="bg-white border border-slate-150 shadow-sm p-6 rounded-2xl flex items-center gap-4 hover:border-white/20 transition-colors duration-300 shadow-xl">
-            <div className="w-12 h-12 bg-blue-500/10 text-blue-400 rounded-xl flex items-center justify-center shrink-0 border border-blue-500/20">
-              <Calendar className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Today's Bookings</div>
-              <div className="text-2xl font-black text-slate-900 mt-0.5">{stats?.todaysBookings || 0}</div>
-            </div>
+          <div className="flex items-center gap-4">
+            <button onClick={() => { setLoading(true); loadActiveTabData(); }} className="text-slate-500 hover:text-[#22C55E] flex items-center gap-2 text-xs font-bold transition-colors">
+              <RefreshCw className="w-4 h-4" /> Refresh Data
+            </button>
           </div>
+        </header>
 
-          <div className="bg-white border border-slate-150 shadow-sm p-6 rounded-2xl flex items-center gap-4 hover:border-white/20 transition-colors duration-300 shadow-xl">
-            <div className="w-12 h-12 bg-yellow-500/10 text-yellow-450 text-yellow-400 rounded-xl flex items-center justify-center shrink-0 border border-yellow-500/20">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pending Approvals</div>
-              <div className="text-2xl font-black text-slate-900 mt-0.5">{stats?.pendingApprovals || 0}</div>
-            </div>
-          </div>
+        <main className="flex-1 overflow-y-auto p-6 text-slate-800 relative">
+          {loading && <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-green-500" /></div>}
+          
+          <div className="max-w-7xl mx-auto space-y-8">
 
-          <div className="bg-white border border-slate-150 shadow-sm p-6 rounded-2xl flex items-center gap-4 hover:border-white/20 transition-colors duration-300 shadow-xl">
-            <div className="w-12 h-12 bg-purple-500/10 text-purple-400 rounded-xl flex items-center justify-center shrink-0 border border-purple-500/20">
-              <Users className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Members</div>
-              <div className="text-2xl font-black text-slate-900 mt-0.5">{stats?.activeMembers || 0}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tab Selector */}
-        <div className="border-b border-slate-250">
-          <div className="flex gap-6">
-            {["overview", "bookings", "users", "slots"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => {
-                  setActiveTab(tab);
-                  setSearchQuery("");
-                  setStatusFilter("ALL");
-                }}
-                className={`pb-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 cursor-pointer ${
-                  activeTab === tab
-                    ? "border-[#22C55E] text-[#22C55E]"
-                    : "border-transparent text-slate-400 hover:text-[#0F172A]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Overview Tab */}
-        {activeTab === "overview" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Revenue AreaChart */}
-            <div className="lg:col-span-2 bg-white border border-slate-150 shadow-sm rounded-2xl p-6 shadow-xl">
-              <h2 className="text-lg font-black text-slate-850 mb-6 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#22C55E]" /> Revenue Performance (7-Day Area Trend)
-              </h2>
-              <div className="h-80 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={revenueTrend.length > 0 ? revenueTrend : stats?.trend} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <defs>
-                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#22C55E" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#22C55E" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                    <XAxis dataKey="name" stroke="#6B7280" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#6B7280" fontSize={11} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: "#111111", borderColor: "rgba(255,255,255,0.1)" }} />
-                    <Area type="monotone" dataKey="revenue" stroke="#22C55E" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Live Activity Feed */}
-            <div className="bg-white border border-slate-150 shadow-sm rounded-2xl p-6 shadow-xl">
-              <h2 className="text-lg font-black text-slate-850 mb-6 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-[#22C55E]" /> Recent Booking Inflow
-              </h2>
-              <div className="divide-y divide-white/5 overflow-y-auto max-h-80 space-y-1">
-                {loadingBookings ? (
-                  <div className="text-center py-12 text-slate-400 text-sm">Loading activity...</div>
-                ) : bookings.length > 0 ? (
-                  bookings.slice(0, 5).map((b, i) => (
-                    <div key={i} className="py-3.5 flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-850 text-sm truncate">{b.user.name}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{b.slot.startTime} - {b.slot.endTime} • {b.slot.date}</div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="font-extrabold text-sm text-[#0F172A]">₹{b.amountPaid}</div>
-                        <div className="mt-1">
-                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                            b.status === "CONFIRMED"
-                              ? "bg-green-500/10 text-green-400 border-green-500/20"
-                              : b.status === "PENDING"
-                                ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-                                : "bg-red-500/10 text-red-400 border-red-500/20"
-                          }`}>
-                            {b.status}
-                          </span>
+            {/* TAB: OVERVIEW */}
+            {activeTab === "overview" && stats && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {[
+                    { label: "Total Users", value: stats.totalUsers || 0, icon: Users, color: "blue" },
+                    { label: "Active Members", value: stats.activeMembers || 0, icon: Award, color: "purple" },
+                    { label: "Active Bookings", value: stats.totalBookings || 0, icon: ListOrdered, color: "indigo" },
+                    { label: "Completed Bookings", value: stats.completedBookings || 0, icon: Check, color: "emerald" },
+                    { label: "Cancelled Bookings", value: stats.cancelledBookings || 0, icon: X, color: "red" },
+                    { label: "Today's Bookings", value: stats.todaysBookings || 0, icon: Calendar, color: "orange" },
+                    { label: "Monthly Rev.", value: `₹${(stats.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "green" },
+                    { label: "Active Grounds", value: stats.activeVenues || 0, icon: MapPin, color: "teal" },
+                    { label: "Slots Today", value: stats.totalSlotsToday || 0, icon: Clock, color: "slate" },
+                    { label: "Booked Slots", value: stats.bookedSlotsToday || 0, icon: ListOrdered, color: "emerald" },
+                    { label: "Available Slots", value: stats.availableSlotsToday || 0, icon: AlertCircle, color: "yellow" },
+                    { label: "Occupancy Rate", value: `${stats.occupancyRate || 0}%`, icon: Activity, color: "cyan" }
+                  ].map((kpi, i) => (
+                    <div key={i} className="bg-white p-4 rounded-2xl border border-[#EEEDE8] shadow-sm flex flex-col justify-between">
+                      <div className="flex justify-between items-start">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-${kpi.color}-500/10 text-${kpi.color}-600`}>
+                          <kpi.icon className="w-4 h-4" />
                         </div>
                       </div>
+                      <div className="mt-4">
+                        <h4 className="text-2xl font-black tracking-tight">{kpi.value}</h4>
+                        <p className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mt-1">{kpi.label}</p>
+                      </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-12 text-slate-400 text-sm">No activity recorded.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+                  ))}
+                </div>
 
-        {/* Bookings Directory Tab */}
-        {activeTab === "bookings" && (
-          <div className="bg-white border border-slate-150 shadow-sm rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-              <h2 className="text-lg font-black text-[#0F172A]">Reservations Directory</h2>
-              <div className="flex flex-wrap gap-3 w-full sm:w-auto">
-                <input 
-                  type="text"
-                  placeholder="Search client name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="px-3.5 py-2 bg-slate-50 border border-slate-250 rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-[#22C55E] min-w-[200px]"
-                />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-250 rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-[#22C55E] text-[#0F172A]"
-                >
-                  <option value="ALL">All Status</option>
-                  <option value="CONFIRMED">Confirmed</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="CANCELLED">Cancelled</option>
-                </select>
+                <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm">
+                  <h3 className="text-base font-black tracking-tight mb-6">Top Customers Leaderboard</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100">
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Rank</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Customer</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Tier</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Bookings</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Total Spend</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Points</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topCustomers.length === 0 ? (
+                          <tr>
+                            <td colSpan="6" className="py-8 text-center text-slate-500 font-medium">
+                              No customer booking data available yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          topCustomers.map((user, idx) => (
+                            <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                              <td className="py-4 px-4 font-black text-slate-500">#{idx + 1}</td>
+                              <td className="py-4 px-4 font-bold text-slate-900">{user.name}</td>
+                              <td className="py-4 px-4"><span className="px-2 py-1 bg-slate-100 text-slate-700 text-[10px] font-black rounded">{(user.userMemberships && user.userMemberships.length > 0) ? user.userMemberships.map(m => m.tier).join(', ') : 'NONE'}</span></td>
+                              <td className="py-4 px-4 font-bold">{user.bookingCount || 0}</td>
+                              <td className="py-4 px-4 font-bold">₹{user.totalSpent?.toLocaleString()}</td>
+                              <td className="py-4 px-4 font-bold text-yellow-600">{user.pointsBalance || 0}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="overflow-x-auto border border-slate-250 rounded-xl bg-slate-50">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-250 bg-white/5 text-slate-500 font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Client</th>
-                    <th className="py-3 px-4">Date & Time</th>
-                    <th className="py-3 px-4">Venue Branch</th>
-                    <th className="py-3 px-4">Payment</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Change Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 font-semibold text-slate-700">
-                  {loadingBookings ? (
-                    <tr>
-                      <td colSpan="6" className="text-center py-8 text-slate-400">Loading bookings...</td>
-                    </tr>
-                  ) : bookings.length > 0 ? (
-                    bookings
-                      .filter(b => {
-                        const matchesName = b.user.name.toLowerCase().includes(searchQuery.toLowerCase());
-                        const matchesStatus = statusFilter === "ALL" || b.status === statusFilter;
-                        return matchesName && matchesStatus;
-                      })
-                      .map(b => (
-                        <tr key={b.id} className="hover:bg-white/5 transition-colors">
-                          <td className="py-3.5 px-4 font-bold text-[#0F172A]">
-                            {b.user.name}
-                            <div className="text-[10px] text-slate-400 font-normal">{b.user.email}</div>
+            {/* TAB: USERS */}
+            {activeTab === "users" && (
+              <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm animate-in fade-in duration-500">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-base font-black tracking-tight">User Management</h3>
+                  <span className="text-xs font-bold text-slate-500">{users.length} Total Users</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">User</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Contact</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Membership</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Bookings</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Total Spent</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map(u => (
+                        <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900">{u.name}</div>
+                            <div className="text-[10px] text-slate-500">{new Date(u.createdAt).toLocaleDateString()}</div>
                           </td>
-                          <td className="py-3.5 px-4">
-                            <div>{new Date(b.slot.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
-                            <div className="text-[10px] text-slate-400 font-normal mt-0.5">{b.slot.startTime} - {b.slot.endTime}</div>
+                          <td className="py-3 px-4 text-xs">{u.email}<br/>{u.phone || 'N/A'}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-blue-600">{u.userMemberships?.filter(m => m.status === 'ACTIVE').map(m => m.tier).join(', ') || 'NONE'}</td>
+                          <td className="py-3 px-4 text-xs font-bold">{u.bookingCount || 0}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-green-600">₹{u.totalSpent || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: BOOKINGS */}
+            {activeTab === "bookings" && (
+              <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm animate-in fade-in duration-500">
+                <div className="flex flex-wrap gap-4 justify-between items-center mb-6">
+                  <h3 className="text-base font-black tracking-tight">Booking Management</h3>
+                  <div className="flex gap-3">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input 
+                        type="text" 
+                        placeholder="Search bookings..." 
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#22C55E]"
+                      />
+                    </div>
+                    <select 
+                      value={statusFilter}
+                      onChange={e => setStatusFilter(e.target.value)}
+                      className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-white outline-none"
+                    >
+                      <option value="ALL">All Status</option>
+                      <option value="CONFIRMED">Confirmed</option>
+                      <option value="PENDING">Pending</option>
+                      <option value="CANCELLED">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Booking ID</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">User</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Venue & Time</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Amount</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Status</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredBookings.map(b => (
+                        <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 text-[10px] font-mono text-slate-500">{b.id.substring(0,8).toUpperCase()}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-slate-800">{b.user?.name}<br/><span className="text-[10px] text-slate-400 font-normal">{b.user?.email}</span></td>
+                          <td className="py-3 px-4 text-xs text-slate-700">
+                            <strong>{b.slot?.branch?.name || 'Eagle Box'}</strong><br/>
+                            {b.slot?.date} • {b.slot?.startTime}
                           </td>
-                          <td className="py-3.5 px-4 text-slate-500">{b.slot.branch?.name || 'Eagle Box Cricket'}</td>
-                          <td className="py-3.5 px-4 font-extrabold text-[#22C55E]">₹{b.amountPaid}</td>
-                          <td className="py-3.5 px-4">
-                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                              b.status === "CONFIRMED"
-                                ? "bg-green-500/10 text-green-400 border-green-500/20"
-                                : b.status === "PENDING"
-                                  ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-                                  : "bg-red-500/10 text-red-400 border-red-500/20"
-                            }`}>
-                              {b.status}
-                            </span>
+                          <td className="py-3 px-4 text-xs font-bold text-green-600">₹{b.amountPaid}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 text-[9px] font-black rounded uppercase ${
+                              b.status === 'CONFIRMED' || b.status === 'COMPLETED' ? 'bg-green-50 text-green-700' :
+                              b.status === 'PENDING' ? 'bg-yellow-50 text-yellow-700' :
+                              'bg-red-50 text-red-700'
+                            }`}>{b.status}</span>
                           </td>
-                          <td className="py-3.5 px-4">
-                            <select
+                          <td className="py-3 px-4">
+                            <select 
                               value={b.status}
                               onChange={(e) => handleStatusChange(b.id, e.target.value)}
-                              className="bg-white text-slate-800 border border-slate-250 rounded px-2.5 py-1 text-[10px] font-bold text-[#0F172A] focus:outline-none focus:border-[#22C55E]"
+                              className="text-[10px] font-bold border border-slate-200 rounded p-1 outline-none"
                             >
-                              <option value="CONFIRMED">CONFIRMED</option>
+                              <option value="CONFIRMED">CONFIRM</option>
                               <option value="PENDING">PENDING</option>
-                              <option value="CANCELLED">CANCELLED</option>
+                              <option value="CANCELLED">CANCEL</option>
                             </select>
                           </td>
                         </tr>
-                      ))
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="text-center py-8 text-slate-400">No bookings found.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Users Directory Tab */}
-        {activeTab === "users" && (
-          <div className="bg-white border border-slate-150 shadow-sm rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-              <h2 className="text-lg font-black text-[#0F172A]">Registered Users Directory</h2>
-              <input 
-                type="text"
-                placeholder="Search name or email..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="px-3.5 py-2 bg-slate-50 border border-slate-250 rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-[#22C55E] min-w-[240px]"
-              />
-            </div>
-
-            <div className="overflow-x-auto border border-slate-250 rounded-xl bg-slate-50">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-250 bg-white/5 text-slate-500 font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Name</th>
-                    <th className="py-3 px-4">Email / Phone</th>
-                    <th className="py-3 px-4">Role</th>
-                    <th className="py-3 px-4">Membership Club</th>
-                    <th className="py-3 px-4">Loyalty Balance</th>
-                    <th className="py-3 px-4 text-center">Bookings Count</th>
-                    <th className="py-3 px-4">Join Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 font-semibold text-slate-700">
-                  {loadingUsers ? (
-                    <tr>
-                      <td colSpan="7" className="text-center py-8 text-slate-400">Loading users directory...</td>
-                    </tr>
-                  ) : users.length > 0 ? (
-                    users
-                      .filter(u => {
-                        const query = searchQuery.toLowerCase();
-                        return u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query);
-                      })
-                      .map(u => (
-                        <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                          <td className="py-3.5 px-4 font-bold text-[#0F172A]">{u.name}</td>
-                          <td className="py-3.5 px-4 text-slate-500">
-                            <div>{u.email}</div>
-                            <div className="text-[10px] text-slate-400 font-normal mt-0.5">{u.phone || 'No phone'}</div>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border ${
-                              u.role === 'ADMIN' 
-                                ? 'bg-red-500/10 text-red-400 border-red-500/20' 
-                                : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                            }`}>
-                              {u.role}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border ${
-                              u.membershipTier === 'PLATINUM'
-                                ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                                : u.membershipTier === 'GOLD'
-                                  ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                                  : u.membershipTier === 'SILVER'
-                                    ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                                    : 'bg-zinc-800 text-slate-400 border-zinc-700'
-                            }`}>
-                              {u.membershipTier}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 font-extrabold text-[#22C55E]">{u.pointsBalance} pts</td>
-                          <td className="py-3.5 px-4 text-center text-[#0F172A] font-extrabold">{u.bookingCount ?? 0} bookings</td>
-                          <td className="py-3.5 px-4 text-slate-400 text-[10px]">
-                            {new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </td>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {/* TAB: LOCKS */}
+            {activeTab === "locks" && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-black text-[#0F172A] flex items-center gap-2">
+                    <Lock className="w-5 h-5 text-yellow-500" /> Active Slot Locks
+                  </h2>
+                  <span className="text-xs font-bold text-yellow-700 bg-yellow-50 px-2 py-1 rounded">
+                    {slotLocks.length} Active Locks
+                  </span>
+                </div>
+                {slotLocks.length === 0 ? (
+                  <div className="text-center py-10 text-slate-500 font-semibold text-sm">
+                    No active slot reservations.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100">
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Lock ID</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">User</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Venue & Time</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Expires At</th>
                         </tr>
-                      ))
-                  ) : (
-                    <tr>
-                      <td colSpan="7" className="text-center py-8 text-slate-400">No users found.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Slots Directory Tab */}
-        {activeTab === "slots" && (
-          <div className="bg-white border border-slate-150 shadow-sm rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-              <div>
-                <h2 className="text-lg font-black text-[#0F172A]">Slot Inventory System</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Define slots and manage bookings schedules.</p>
-              </div>
-              <div className="flex flex-wrap gap-3 w-full sm:w-auto">
-                <input 
-                  type="date"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="px-3.5 py-2 bg-slate-50 border border-slate-250 rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-[#22C55E] text-[#0F172A]"
-                />
-                <button
-                  onClick={() => setShowCreateSlotModal(true)}
-                  className="px-4 py-2 bg-[#22C55E] hover:bg-green-600 text-black font-black text-xs rounded-xl shadow-lg transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <Plus size={14} /> Create Slot
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto border border-slate-250 rounded-xl bg-slate-50">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-250 bg-white/5 text-slate-500 font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Time Window</th>
-                    <th className="py-3 px-4">Branch Venue</th>
-                    <th className="py-3 px-4">Hourly Price</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 font-semibold text-slate-700">
-                  {loadingSlots ? (
-                    <tr>
-                      <td colSpan="6" className="text-center py-8 text-slate-400">Loading slot records...</td>
-                    </tr>
-                  ) : slots.length > 0 ? (
-                    slots
-                      .filter(s => {
-                        if (!searchQuery) return true;
-                        return s.date === searchQuery;
-                      })
-                      .map(s => {
-                        const branchName = branches.find(b => b.id === s.branchId)?.name || 'Eagle Box Indiranagar';
-                        return (
-                          <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                            <td className="py-3.5 px-4 font-bold text-[#0F172A]">
-                              {new Date(s.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </thead>
+                      <tbody>
+                        {slotLocks.map(lock => (
+                          <tr key={lock.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                            <td className="py-3 px-4 text-[10px] font-mono text-slate-500">{lock.id.substring(0,8).toUpperCase()}</td>
+                            <td className="py-3 px-4 text-xs font-bold text-slate-800">{lock.user?.name}<br/><span className="text-[10px] text-slate-400 font-normal">{lock.user?.email}</span></td>
+                            <td className="py-3 px-4 text-xs text-slate-700">
+                              <strong>{lock.slot?.branch?.name || 'Eagle Box'}</strong><br/>
+                              {lock.slot?.date} • {lock.slot?.startTime}
                             </td>
-                            <td className="py-3.5 px-4 text-[#0F172A] font-bold">{s.startTime} - {s.endTime}</td>
-                            <td className="py-3.5 px-4 text-slate-500">{branchName}</td>
-                            <td className="py-3.5 px-4 font-extrabold text-[#22C55E]">₹{s.price}</td>
-                            <td className="py-3.5 px-4">
-                              <span className={`text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
-                                s.status === "AVAILABLE"
-                                  ? "bg-green-500/10 text-green-400 border-green-500/20"
-                                  : "bg-red-500/10 text-red-400 border-red-500/20"
-                              }`}>
-                                {s.status}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <button
-                                onClick={() => handleDeleteSlot(s.id)}
-                                disabled={s.status === "BOOKED"}
-                                className={`px-2.5 py-1 font-bold text-[10px] rounded-lg transition-colors cursor-pointer flex items-center gap-1 ${
-                                  s.status === "BOOKED"
-                                    ? "bg-zinc-800 text-slate-400 cursor-not-allowed border border-slate-100"
-                                    : "bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20"
-                                }`}
-                              >
-                                <Trash size={12} /> Delete
-                              </button>
+                            <td className="py-3 px-4 text-xs font-bold text-yellow-600">
+                              {new Date(lock.expiresAt).toLocaleTimeString()}
                             </td>
                           </tr>
-                        );
-                      })
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="text-center py-8 text-slate-400">No slot inventory created.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Create Slot Modal */}
-      {showCreateSlotModal && (
-        <div className="fixed inset-0 bg-slate-50/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-white border border-slate-150 shadow-sm rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-4">
-              <h3 className="text-lg font-black text-[#0F172A]">Create New Slot</h3>
-              <button 
-                onClick={() => setShowCreateSlotModal(false)}
-                className="text-slate-500 hover:text-[#0F172A] text-sm"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateSlot} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Slot Date</label>
-                <input 
-                  type="date"
-                  required
-                  min={new Date().toISOString().split('T')[0]}
-                  value={createSlotForm.date}
-                  onChange={(e) => setCreateSlotForm({ ...createSlotForm, date: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#22C55E] text-[#0F172A]"
-                />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
+            )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Start Time (HH:MM)</label>
-                  <input 
-                    type="text"
-                    required
-                    placeholder="e.g. 09:00"
-                    value={createSlotForm.startTime}
-                    onChange={(e) => setCreateSlotForm({ ...createSlotForm, startTime: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#22C55E] text-[#0F172A]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">End Time (HH:MM)</label>
-                  <input 
-                    type="text"
-                    required
-                    placeholder="e.g. 10:00"
-                    value={createSlotForm.endTime}
-                    onChange={(e) => setCreateSlotForm({ ...createSlotForm, endTime: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#22C55E] text-[#0F172A]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Price (₹)</label>
-                <input 
-                  type="number"
-                  required
-                  placeholder="e.g. 1200"
-                  value={createSlotForm.price}
-                  onChange={(e) => setCreateSlotForm({ ...createSlotForm, price: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#22C55E] text-[#0F172A]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Branch / Venue</label>
-                <select
-                  value={createSlotForm.branchId}
-                  onChange={(e) => setCreateSlotForm({ ...createSlotForm, branchId: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-250 rounded-xl text-sm outline-none focus:ring-1 focus:ring-[#22C55E] text-[#0F172A]"
-                >
-                  <option value="">Select Branch</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name} (₹{b.pricePerHour}/hr)</option>
+            {/* TAB: VENUES */}
+            {activeTab === "venues" && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {venueAnalytics.map(v => (
+                    <div key={v.id} className="bg-white rounded-3xl border border-[#EEEDE8] p-6 shadow-sm flex flex-col">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                          <MapPin className="w-6 h-6" />
+                        </div>
+                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase">Live Status</span>
+                      </div>
+                      <h4 className="text-lg font-black text-slate-900">{v.name}</h4>
+                      
+                      <div className="mt-6 space-y-3">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-slate-500">Total Slots</span>
+                          <span className="text-slate-900">{v.totalSlots}</span>
+                        </div>
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-slate-500">Booked</span>
+                          <span className="text-emerald-600">{v.bookedSlots}</span>
+                        </div>
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-slate-500">Available</span>
+                          <span className="text-slate-900">{v.availableSlots}</span>
+                        </div>
+                        
+                        <div className="pt-3 border-t border-slate-100">
+                          <div className="flex justify-between text-xs font-bold mb-1">
+                            <span className="text-slate-500">Occupancy</span>
+                            <span className="text-blue-600">{v.occupancy}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div className="bg-blue-500 h-full transition-all" style={{width: `${v.occupancy}%`}} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   ))}
-                </select>
+                </div>
               </div>
+            )}
 
-              <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
-                <button 
-                  type="button"
-                  onClick={() => setShowCreateSlotModal(false)}
-                  className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-[#0F172A] font-bold text-xs rounded-xl border border-slate-250 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isCreatingSlot}
-                  className="px-5 py-2.5 bg-[#22C55E] hover:bg-green-600 disabled:opacity-50 text-black font-black text-xs rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
-                >
-                  {isCreatingSlot && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Create Slot
-                </button>
+            {/* TAB: REVENUE */}
+            {activeTab === "revenue" && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                {!stats || stats.totalRevenue === 0 ? (
+                  <div className="bg-white p-12 rounded-3xl border border-[#EEEDE8] shadow-sm text-center">
+                    <DollarSign className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                    <h3 className="text-xl font-black text-slate-800">No revenue records available yet.</h3>
+                    <p className="text-sm text-slate-500 mt-2">Bookings must be paid and confirmed to appear here.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                        <h4 className="text-2xl font-black text-green-600">₹{stats.todayRevenue?.toLocaleString() || 0}</h4>
+                        <p className="text-xs font-bold text-slate-500 uppercase mt-1">Today</p>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                        <h4 className="text-2xl font-black text-blue-600">₹{stats.weeklyRevenue?.toLocaleString() || 0}</h4>
+                        <p className="text-xs font-bold text-slate-500 uppercase mt-1">This Week</p>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                        <h4 className="text-2xl font-black text-purple-600">₹{stats.monthlyRevenue?.toLocaleString() || 0}</h4>
+                        <p className="text-xs font-bold text-slate-500 uppercase mt-1">This Month</p>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                        <h4 className="text-2xl font-black text-indigo-600">₹{stats.yearlyRevenue?.toLocaleString() || 0}</h4>
+                        <p className="text-xs font-bold text-slate-500 uppercase mt-1">This Year</p>
+                      </div>
+                      <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white p-6 rounded-2xl shadow-sm text-center">
+                        <h4 className="text-2xl font-black">₹{stats.totalRevenue?.toLocaleString() || 0}</h4>
+                        <p className="text-xs font-bold uppercase mt-1 opacity-90">Total Revenue</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm">
+                        <h3 className="text-base font-black tracking-tight mb-6">Revenue Trend (30 Days)</h3>
+                        <div className="h-72 w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={stats.trend}>
+                              <defs>
+                                <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#22C55E" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#22C55E" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} tickFormatter={(v) => `₹${v}`}/>
+                              <RechartsTooltip 
+                                contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                                itemStyle={{color: '#22C55E', fontWeight: 'bold'}}
+                              />
+                              <Area type="monotone" dataKey="revenue" stroke="#22C55E" strokeWidth={4} fillOpacity={1} fill="url(#colorRev)" />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm flex flex-col justify-between">
+                        <div>
+                          <h3 className="text-base font-black tracking-tight mb-2">Average Booking Value</h3>
+                          <div className="text-4xl font-black text-slate-800 mb-6">
+                            ₹{Math.round(stats.averageBookingValue || 0).toLocaleString()}
+                          </div>
+                        </div>
+                        
+                        <h3 className="text-sm font-black tracking-tight mb-4 text-slate-500 uppercase">Top Customers</h3>
+                        <div className="space-y-3 flex-1 overflow-y-auto max-h-48">
+                          {stats.topRevenueCustomers?.map((c, idx) => (
+                            <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
+                              <span className="font-bold text-slate-700">{c.name}</span>
+                              <span className="font-black text-green-600">₹{c.revenue.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm">
+                        <h3 className="text-base font-black tracking-tight mb-6">Revenue by Branch</h3>
+                        <div className="h-64 w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={stats.revenueByBranch}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="name" tick={{fontSize: 12}} />
+                              <YAxis tickFormatter={(v) => `₹${v}`} tick={{fontSize: 10}} />
+                              <RechartsTooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px'}} />
+                              <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm">
+                        <h3 className="text-base font-black tracking-tight mb-6">Revenue by Plan</h3>
+                        <div className="h-64 w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={stats.revenueByPlan} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5}>
+                                {stats.revenueByPlan?.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={['#22c55e', '#3b82f6', '#f59e0b', '#8b5cf6', '#64748b'][index % 5]} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip contentStyle={{borderRadius: '12px'}} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            </form>
+            )}
+
+            {/* TAB: MEMBERSHIPS */}
+            {activeTab === "memberships" && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                {!membershipStats || membershipStats.activeMembers === 0 ? (
+                  <div className="bg-white p-12 rounded-3xl border border-[#EEEDE8] shadow-sm text-center">
+                    <Award className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                    <h3 className="text-xl font-black text-slate-800">No membership subscriptions purchased yet.</h3>
+                    <p className="text-sm text-slate-500 mt-2">When users buy Starter, Pro, Elite, or Champion plans, they will appear here.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                        <h4 className="text-3xl font-black text-blue-600">{membershipStats.activeMembers}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Total Active Members</p>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                        <h4 className="text-3xl font-black text-green-600">₹{membershipStats.membershipRevenue?.toLocaleString()}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Membership Revenue</p>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                        <h4 className="text-3xl font-black text-yellow-600">{membershipStats.expiringMemberships}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Expiring Soon</p>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                        <h4 className="text-3xl font-black text-red-600">{membershipStats.expiredMemberships}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Expired Members</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                        <h4 className="text-xl font-black text-slate-700">{membershipStats.breakdowns?.STARTER || 0}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Starter Members</p>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                        <h4 className="text-xl font-black text-slate-700">{membershipStats.breakdowns?.PRO || 0}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Pro Members</p>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                        <h4 className="text-xl font-black text-slate-700">{membershipStats.breakdowns?.ELITE || 0}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Elite Members</p>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                        <h4 className="text-xl font-black text-slate-700">{membershipStats.breakdowns?.CHAMPION || 0}</h4>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Champion Members</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm flex flex-col justify-center">
+                        <h3 className="text-base font-black tracking-tight mb-6">Membership Usage Statistics</h3>
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="font-bold text-slate-500">Total Slots Granted</span>
+                            <span className="font-black text-slate-800">{membershipStats.usage?.totalSlotsGranted || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="font-bold text-slate-500">Total Slots Used</span>
+                            <span className="font-black text-blue-600">{membershipStats.usage?.totalSlotsUsed || 0}</span>
+                          </div>
+                          <div className="pt-4 border-t border-slate-100">
+                            <div className="flex justify-between items-center text-sm mb-2">
+                              <span className="font-bold text-slate-500">Usage Rate</span>
+                              <span className="font-black text-emerald-600">{membershipStats.usage?.usagePercent || 0}%</span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                              <div className="bg-emerald-500 h-full transition-all" style={{width: `${membershipStats.usage?.usagePercent || 0}%`}} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm">
+                        <h3 className="text-base font-black tracking-tight mb-6">Tier Distribution</h3>
+                        <div className="h-48 w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={[
+                              { name: "Starter", count: membershipStats.breakdowns?.STARTER || 0 },
+                              { name: "Pro", count: membershipStats.breakdowns?.PRO || 0 },
+                              { name: "Elite", count: membershipStats.breakdowns?.ELITE || 0 },
+                              { name: "Champion", count: membershipStats.breakdowns?.CHAMPION || 0 },
+                            ]}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="name" tick={{fontSize: 10}} />
+                              <YAxis tick={{fontSize: 10}} />
+                              <RechartsTooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none'}} />
+                              <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* TAB: LOYALTY */}
+            {activeTab === "loyalty" && loyaltyStats && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="bg-gradient-to-br from-yellow-400 to-orange-500 text-white p-6 rounded-3xl shadow-lg flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-4xl font-black">{loyaltyStats.totalActivePoints?.toLocaleString()}</h4>
+                      <p className="text-xs font-bold uppercase tracking-widest mt-2 opacity-80">Total Active Points</p>
+                    </div>
+                    <p className="text-[10px] mt-4 opacity-80 font-medium leading-relaxed">
+                      The total pool of loyalty points currently sitting unspent in all customers' wallets.
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-4xl font-black text-slate-900">₹{loyaltyStats.totalDiscountsGiven?.toLocaleString()}</h4>
+                      <p className="text-xs font-bold uppercase tracking-widest mt-2 text-slate-500">Value Redeemed</p>
+                    </div>
+                    <p className="text-[10px] mt-4 text-slate-400 font-medium leading-relaxed">
+                      The total Rupee (₹) value of all benefits claimed. Includes coupon discounts, points spent, and free membership slots used.
+                    </p>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-4xl font-black text-slate-900">{loyaltyStats.totalPointsIssued?.toLocaleString()}</h4>
+                      <p className="text-xs font-bold uppercase tracking-widest mt-2 text-slate-500">Total Points Issued</p>
+                    </div>
+                    <p className="text-[10px] mt-4 text-slate-400 font-medium leading-relaxed">
+                      The total number of points ever given to customers over the lifetime of the platform (includes bookings and referrals).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: SUPPORT */}
+            {activeTab === "support" && supportStats && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                    <h4 className="text-3xl font-black text-blue-600">{supportStats.openTickets}</h4>
+                    <p className="text-xs font-bold text-slate-500 uppercase mt-1">Open Tickets</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                    <h4 className="text-3xl font-black text-yellow-600">{supportStats.pendingTickets}</h4>
+                    <p className="text-xs font-bold text-slate-500 uppercase mt-1">Pending</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                    <h4 className="text-3xl font-black text-green-600">{supportStats.resolvedTickets}</h4>
+                    <p className="text-xs font-bold text-slate-500 uppercase mt-1">Resolved</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center shadow-sm">
+                    <h4 className="text-3xl font-black text-purple-600">{supportStats.averageResponseTime}</h4>
+                    <p className="text-xs font-bold text-slate-500 uppercase mt-1">Avg Response</p>
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm overflow-x-auto">
+                  <h3 className="text-base font-black tracking-tight mb-6">Recent Tickets</h3>
+                  <table className="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Ticket ID</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">User</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Category</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Priority</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Status</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Created</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {supportStats.recentTickets.map(t => (
+                        <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 text-xs font-bold text-slate-800">{t.ticketId || t.id.substring(0,8)}</td>
+                          <td className="py-3 px-4">
+                            <p className="text-sm font-bold text-slate-900">{t.user?.name}</p>
+                            <p className="text-[10px] text-slate-500">{t.user?.email}</p>
+                          </td>
+                          <td className="py-3 px-4 text-xs font-bold text-slate-600">{t.category || 'Other'}</td>
+                          <td className="py-3 px-4 text-xs">
+                            <span className={`px-2 py-0.5 rounded font-black uppercase text-[9px] ${
+                              t.priority === 'High' ? 'bg-red-50 text-red-600' : 
+                              t.priority === 'Medium' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'
+                            }`}>{t.priority || 'Medium'}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 text-[10px] font-black rounded uppercase ${
+                              t.status === 'OPEN' ? 'bg-blue-50 text-blue-600' : 
+                              t.status === 'PENDING' ? 'bg-orange-50 text-orange-600' : 
+                              t.status === 'RESOLVED' ? 'bg-green-50 text-green-600' : 
+                              'bg-slate-100 text-slate-600'
+                            }`}>{t.status}</span>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-500">{new Date(t.createdAt).toLocaleDateString()}</td>
+                          <td className="py-3 px-4 text-right">
+                            <button 
+                              onClick={() => setSelectedSupportTicket(t)}
+                              className="px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded hover:bg-slate-800 transition-colors"
+                            >
+                              View & Act
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {supportStats.recentTickets.length === 0 && (
+                        <tr>
+                          <td colSpan="7" className="text-center py-6 text-sm text-slate-500">No support tickets found.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Ticket Action Modal */}
+            {selectedSupportTicket && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-white border border-slate-150 rounded-[24px] max-w-2xl w-full p-6 shadow-2xl text-[#0F172A] max-h-[90vh] overflow-y-auto">
+                  <div className="flex justify-between items-start mb-6 border-b border-slate-200 pb-4">
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900">Manage Ticket: {selectedSupportTicket.ticketId || selectedSupportTicket.id.substring(0,8)}</h3>
+                      <p className="text-xs font-bold text-slate-500 mt-1">{selectedSupportTicket.subject}</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setSelectedSupportTicket(null);
+                        setAdminTicketResponse("");
+                      }}
+                      className="text-slate-400 hover:text-slate-700 font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 mb-6">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                      <p className="text-xs font-bold text-slate-400 uppercase mb-2">User Message</p>
+                      <p className="text-sm font-medium text-slate-800">{selectedSupportTicket.message}</p>
+                    </div>
+                    
+                    {selectedSupportTicket.attachmentUrl && (
+                      <div className="text-sm">
+                        <span className="font-bold text-slate-600">Attachment:</span>{" "}
+                        <a href={selectedSupportTicket.attachmentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">View File</a>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Admin Reply</label>
+                      <textarea 
+                        rows={4}
+                        value={adminTicketResponse}
+                        onChange={(e) => setAdminTicketResponse(e.target.value)}
+                        placeholder="Write your response to the user here... (This will be sent via email)"
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-medium resize-none focus:outline-none focus:ring-2 focus:ring-[#22C55E]/50"
+                      ></textarea>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 pt-4 border-t border-slate-100">
+                    <button onClick={() => handleSupportTicketUpdate(selectedSupportTicket.id, 'OPEN')} className="px-4 py-2 border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg text-sm font-bold transition-colors">
+                      Mark Open
+                    </button>
+                    <button onClick={() => handleSupportTicketUpdate(selectedSupportTicket.id, 'PENDING')} className="px-4 py-2 border border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg text-sm font-bold transition-colors">
+                      Mark Pending
+                    </button>
+                    <button onClick={() => handleSupportTicketUpdate(selectedSupportTicket.id, 'RESOLVED')} className="px-4 py-2 border border-green-200 text-green-700 bg-green-50 hover:bg-green-100 rounded-lg text-sm font-bold transition-colors">
+                      Resolve Ticket
+                    </button>
+                    <button onClick={() => handleSupportTicketUpdate(selectedSupportTicket.id, 'CLOSED')} className="px-4 py-2 border border-slate-200 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold transition-colors">
+                      Close Ticket
+                    </button>
+                  </div>
+                  
+                  {selectedSupportTicket.adminResponse && !adminTicketResponse && (
+                    <div className="mt-4 text-xs text-slate-500 font-medium">
+                      * Previous Response: {selectedSupportTicket.adminResponse}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: REVIEWS */}
+            {activeTab === "reviews" && (
+              <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm animate-in fade-in duration-500">
+                <h3 className="text-base font-black tracking-tight mb-6">Player Reviews ({reviews.length})</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">User / Date</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Branch</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Rating / Review</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Status</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reviews.map(r => (
+                        <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-800">{r.userName}</div>
+                            <div className="text-xs text-slate-500">{new Date(r.createdAt).toLocaleDateString()}</div>
+                          </td>
+                          <td className="py-3 px-4 text-xs font-bold text-slate-600">{r.branch?.name || 'Eagle Box'}</td>
+                          <td className="py-3 px-4 max-w-xs">
+                            <div className="flex items-center gap-1 mb-1 text-yellow-400">
+                              {[...Array(5)].map((_, i) => (
+                                <Star key={i} className={`w-3 h-3 ${i < r.rating ? 'fill-current' : 'text-slate-200'}`} />
+                              ))}
+                            </div>
+                            <p className="text-xs text-slate-600 truncate">{r.message}</p>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col gap-2">
+                              <span className={`inline-block px-2 py-1 rounded text-[10px] font-black uppercase w-max ${r.isApproved ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                {r.isApproved ? 'APPROVED' : 'PENDING'}
+                              </span>
+                              {r.isFeatured && (
+                                <span className="inline-block px-2 py-1 rounded text-[10px] font-black uppercase w-max bg-purple-100 text-purple-700">
+                                  FEATURED
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-right space-x-2">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await api.patch(`/api/admin/reviews/${r.id}/status`, { isApproved: !r.isApproved });
+                                  setReviews(reviews.map(rv => rv.id === r.id ? res.data : rv));
+                                  toast.success(res.data.isApproved ? "Review Approved" : "Review Hidden");
+                                } catch {
+                                  toast.error("Action failed");
+                                }
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${r.isApproved ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                            >
+                              {r.isApproved ? 'Hide' : 'Approve'}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await api.patch(`/api/admin/reviews/${r.id}/status`, { isFeatured: !r.isFeatured });
+                                  setReviews(reviews.map(rv => rv.id === r.id ? res.data : rv));
+                                  toast.success(res.data.isFeatured ? "Marked as Featured" : "Removed from Featured");
+                                } catch {
+                                  toast.error("Action failed");
+                                }
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${r.isFeatured ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}`}
+                            >
+                              {r.isFeatured ? 'Unfeature' : 'Feature'}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (window.confirm("Delete this review permanently?")) {
+                                  try {
+                                    await api.delete(`/api/admin/reviews/${r.id}`);
+                                    setReviews(reviews.filter(rv => rv.id !== r.id));
+                                    toast.success("Review deleted");
+                                  } catch {
+                                    toast.error("Delete failed");
+                                  }
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {reviews.length === 0 && (
+                        <tr>
+                          <td colSpan="5" className="text-center py-8 text-sm text-slate-500">No reviews submitted yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: AUDIT */}
+            {activeTab === "audit" && (
+              <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm animate-in fade-in duration-500">
+                <h3 className="text-base font-black tracking-tight mb-6">System Audit Logs</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Timestamp</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Admin / User</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Action</th>
+                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLogs.map(log => (
+                        <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 text-xs text-slate-500">{new Date(log.createdAt).toLocaleString()}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-slate-800">{log.adminName}</td>
+                          <td className="py-3 px-4 text-xs font-bold text-blue-600">{log.actionType}</td>
+                          <td className="py-3 px-4 text-xs text-slate-600">{log.newValue || log.previousValue || '-'}</td>
+                        </tr>
+                      ))}
+                      {auditLogs.length === 0 && (
+                        <tr>
+                          <td colSpan="4" className="text-center py-8 text-sm text-slate-500">No logs generated yet. Wait for a few seconds if you recently performed an action.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: COMMUNICATIONS */}
+            {activeTab === "communications" && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm flex items-center gap-6">
+                    <div className="w-14 h-14 bg-green-100 text-green-600 rounded-full flex items-center justify-center shrink-0">
+                      <Check className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Emails Sent</p>
+                      <p className="text-3xl font-black text-slate-800">{commStats?.totalEmailsSent || 0}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm flex items-center gap-6">
+                    <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center shrink-0">
+                      <AlertCircle className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Emails Failed</p>
+                      <p className="text-3xl font-black text-slate-800">{commStats?.totalEmailsFailed || 0}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm">
+                  <h3 className="text-base font-black tracking-tight mb-6">Recent Automated Emails</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100">
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Sent At</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Recipient</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Template</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {commStats?.emailLogs?.map(log => (
+                          <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                            <td className="py-3 px-4 text-xs text-slate-500">{new Date(log.createdAt).toLocaleString()}</td>
+                            <td className="py-3 px-4 text-xs text-slate-600">
+                              <span className="font-bold text-slate-800 block">{log.user?.name || '-'}</span>
+                              <span>{log.toEmail}</span>
+                            </td>
+                            <td className="py-3 px-4 text-xs font-bold text-slate-800">{log.template}</td>
+                            <td className="py-3 px-4 text-xs">
+                              <span className={`px-2.5 py-1 rounded-md text-[10px] font-black tracking-wider uppercase ${
+                                log.status === 'SENT' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}>
+                                {log.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {(!commStats?.emailLogs || commStats.emailLogs.length === 0) && (
+                          <tr>
+                            <td colSpan="4" className="text-center py-8 text-sm text-slate-500">No email logs found.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: EXPORT */}
+            {activeTab === "export" && (
+              <div className="bg-white p-8 rounded-3xl border border-[#EEEDE8] shadow-sm animate-in fade-in duration-500">
+                <div className="max-w-2xl text-center mx-auto space-y-4 mb-8">
+                  <div className="w-16 h-16 bg-[#22C55E]/10 text-[#22C55E] rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Download className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">Export Data Center</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed font-semibold">
+                    Generate and download real-time reports directly from the database. 
+                    Available in PDF, Excel (.xlsx), and CSV formats.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[
+                    { type: 'users', label: 'Users Report' },
+                    { type: 'bookings', label: 'Booking Report' },
+                    { type: 'revenue', label: 'Revenue Report' },
+                    { type: 'memberships', label: 'Membership Report' },
+                    { type: 'rewards', label: 'Rewards Report' },
+                    { type: 'referrals', label: 'Referral Report' },
+                    { type: 'auditlogs', label: 'Audit Log Report' }
+                  ].map(e => (
+                    <div 
+                      key={e.type}
+                      className="p-6 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-4 transition-all hover:shadow-md"
+                    >
+                      <span className="font-black text-sm text-slate-800">{e.label}</span>
+                      <div className="flex gap-2 w-full">
+                        <button 
+                          onClick={() => triggerExport(e.type, 'pdf')}
+                          className="flex-1 flex flex-col items-center gap-1 bg-white hover:bg-red-50 text-red-600 border border-slate-200 rounded-xl py-2 transition-colors"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span className="text-[10px] font-bold">PDF</span>
+                        </button>
+                        <button 
+                          onClick={() => triggerExport(e.type, 'excel')}
+                          className="flex-1 flex flex-col items-center gap-1 bg-white hover:bg-green-50 text-green-600 border border-slate-200 rounded-xl py-2 transition-colors"
+                        >
+                          <Table className="w-4 h-4" />
+                          <span className="text-[10px] font-bold">EXCEL</span>
+                        </button>
+                        <button 
+                          onClick={() => triggerExport(e.type, 'csv')}
+                          className="flex-1 flex flex-col items-center gap-1 bg-white hover:bg-blue-50 text-blue-600 border border-slate-200 rounded-xl py-2 transition-colors"
+                        >
+                          <ListOrdered className="w-4 h-4" />
+                          <span className="text-[10px] font-bold">CSV</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
-        </div>
-      )}
+        </main>
+      </div>
 
     </div>
   );

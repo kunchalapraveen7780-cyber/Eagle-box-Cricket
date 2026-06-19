@@ -147,7 +147,7 @@ export default function Register() {
             Elevate Your Cricket Booking Experience
           </h2>
           <p className="text-slate-500 text-base mb-10 leading-relaxed font-medium">
-            Create an account in less than 30 seconds to lock in premium Bangalore box wickets and schedule competitive club sessions.
+            Create an account in less than 30 seconds to lock in premium Hyderabad box wickets and schedule competitive club sessions.
           </p>
 
           <div className="space-y-6">
@@ -175,7 +175,7 @@ export default function Register() {
         </div>
 
         <div className="relative z-10 text-slate-400 text-xs font-medium">
-          © 2026 Eagle Box Cricket. Made with ❤️ in Bangalore.
+          © 2026 Eagle Box Cricket. Made with ❤️ in Hyderabad.
         </div>
       </div>
 
@@ -214,7 +214,7 @@ export default function Register() {
                   className={`block w-full pl-10 pr-4 py-2.5 bg-slate-50 border ${
                     touched.name && errors.name ? 'border-red-400 focus:ring-red-105' : 'border-slate-200 focus:ring-green-105'
                   } rounded-xl text-[#0F172A] placeholder-slate-400 transition-all outline-none font-bold text-xs focus:bg-white`} 
-                  placeholder="Rahul Sharma"
+                  placeholder="John Doe"
                   required 
                 />
               </div>

@@ -15,15 +15,22 @@ model User {
   googleId        String?        @unique
   phone           String?
   role            String         @default("CUSTOMER") // CUSTOMER or ADMIN
-  membershipTier  String         @default("NONE") // NONE, SILVER, GOLD, PLATINUM
   referralCode    String?        @unique
   pointsBalance   Int            @default(0)
+  totalSpent      Float          @default(0)
+  lifetimeSavings Float          @default(0)
   createdAt       DateTime       @default(now())
   
   bookings        Booking[]
   referralsMade   Referral[]     @relation("Referrer")
   referralsGot    Referral[]     @relation("Referred")
   notifications   Notification[]
+  coupons         Coupon[]
+  supportTickets  SupportTicket[]
+  slotLocks       SlotLock[]
+  reviews         Review[]
+  userMemberships UserMembership[]
+  emailLogs       EmailLog[]
 }
 
 model Membership {
@@ -32,6 +39,24 @@ model Membership {
   price           Float
   durationDays    Int
   benefitsJson    String
+}
+
+model UserMembership {
+  id              String   @id @default(uuid())
+  userId          String
+  tier            String   // STARTER, PRO, ELITE, CHAMPION
+  totalSlots      Int
+  usedSlots       Int      @default(0)
+  status          String   @default("ACTIVE") // ACTIVE, EXPIRED, CONSUMED
+  purchaseDate    DateTime @default(now())
+  expiryDate      DateTime
+  
+  expiryReminderSent7d Boolean @default(false)
+  expiryReminderSent3d Boolean @default(false)
+  expiryReminderSent1d Boolean @default(false)
+  
+  user            User     @relation(fields: [userId], references: [id])
+  bookings        Booking[]
 }
 
 model Slot {
@@ -46,6 +71,7 @@ model Slot {
   
   branch      Branch?  @relation(fields: [branchId], references: [id])
   bookings    Booking[]
+  slotLocks   SlotLock[]
 }
 
 model Branch {
@@ -54,6 +80,7 @@ model Branch {
   location     String
   pricePerHour Float
   slots        Slot[]
+  reviews      Review[]
 }
 
 model Booking {
@@ -62,11 +89,22 @@ model Booking {
   slotId       String
   status       String   @default("CONFIRMED") // PENDING, CONFIRMED, CANCELLED
   amountPaid   Float
+  discountApplied Float @default(0)
   pointsEarned Int      @default(0)
+  bookingType  String   @default("PAID") // PAID, PREPAID
   createdAt    DateTime @default(now())
+  reviewGiven  Boolean  @default(false)
+  
+  reminderSent2h Boolean @default(false)
+  reminderSent30m Boolean @default(false)
+  reviewRequestSent Boolean @default(false)
   
   user         User     @relation(fields: [userId], references: [id])
   slot         Slot     @relation(fields: [slotId], references: [id])
+  review       Review?
+  
+  userMembershipId String?
+  userMembership   UserMembership? @relation(fields: [userMembershipId], references: [id])
 }
 
 model Referral {
@@ -86,16 +124,98 @@ model Offer {
   discountPercent Float
   validFrom       DateTime
   validTo         DateTime
-  targetSegment   String   // ALL, SILVER, GOLD, PLATINUM
+  targetSegment   String   // ALL, STARTER, PRO, ELITE, CHAMPION
 }
 
 model Notification {
   id        String   @id @default(uuid())
   userId    String
+  title     String   @default("Notification")
   message   String
   type      String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model EmailLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  toEmail     String
+  subject     String
+  template    String   @default("default")
+  status      String   @default("SENT") // SENT, FAILED
+  errorMsg    String?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id])
+}
+
+model Coupon {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  discountAmount  Float
+  userId          String
+  isUsed          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  usedAt          DateTime?
+
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+model SlotLock {
+  id          String   @id @default(uuid())
+  slotId      String
+  userId      String
+  status      String   @default("LOCKED")
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+  slot        Slot     @relation(fields: [slotId], references: [id])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  adminName     String
+  actionType    String
+  userAffected  String?
+  previousValue String?
+  newValue      String?
+  createdAt     DateTime @default(now())
+}
+
+model SupportTicket {
+  id             String   @id @default(uuid())
+  ticketId       String   @unique
+  userId         String
+  subject        String
+  category       String   @default("Other")
+  priority       String   @default("Medium") // Low, Medium, High
+  message        String
+  adminResponse  String?
+  attachmentUrl  String?
+  status         String   @default("OPEN") // OPEN, PENDING, RESOLVED, CLOSED
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  user           User     @relation(fields: [userId], references: [id])
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  userId      String
+  userName    String
+  branchId    String
+  bookingId   String   @unique
+  rating      Int
+  message     String
+  isApproved  Boolean  @default(false)
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  booking     Booking  @relation(fields: [bookingId], references: [id])
 }

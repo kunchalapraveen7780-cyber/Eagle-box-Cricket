@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post("/redeem", authenticateToken, async (req, res) => {
   const { points } = req.body;
-  
+
   if (!points || ![500, 1000, 1500].includes(points)) {
     return res.status(400).json({ error: "Invalid points value for redemption. Must be 500, 1000, or 1500 points." });
   }
@@ -59,6 +59,16 @@ router.post("/redeem", authenticateToken, async (req, res) => {
           userId: user.id,
           message: `Redeemed ${points} points for dynamic coupon "${code}" (${discountPercent}% off your next booking!).`,
           type: "REWARD"
+        }
+      });
+
+      // Add Audit Log
+      await tx.auditLog.create({
+        data: {
+          adminName: "SYSTEM",
+          actionType: "Reward Redemption",
+          userAffected: user.id,
+          newValue: `Redeemed ${points} pts for ${code}`
         }
       });
 

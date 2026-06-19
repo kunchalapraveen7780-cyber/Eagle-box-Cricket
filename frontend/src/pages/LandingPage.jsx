@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
-  MapPin, Calendar, Clock, Trophy, Zap, Gift, Check, Loader2, ChevronDown
+  MapPin, Trophy, Zap, Gift, Check, ChevronDown, Star, Calendar
 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import api from '../lib/api';
 import toast from 'react-hot-toast';
+import PremiumVenueCard from '../components/PremiumVenueCard';
+import VenuePreviewModal from '../components/VenuePreviewModal';
 import { GoogleLogin } from '@react-oauth/google';
 import useScrollReveal from '../hooks/useScrollReveal';
 
@@ -276,21 +279,20 @@ export default function LandingPage() {
   // Search form state
   const [selectedBranch, setSelectedBranch] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
-  const [selectedTime, setSelectedTime] = useState("");
-  const [selectedDuration, setSelectedDuration] = useState("1");
+  
+  // Venue Modal state
+  const [selectedPreviewVenue, setSelectedPreviewVenue] = useState(null);
 
   // Auth & General state
   const [user, setUser] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("home");
-  const [showFloatButton, setShowFloatButton] = useState(false);
-  const [isYearly, setIsYearly] = useState(false);
+  const [, setShowFloatButton] = useState(false);
 
-  // Live Slot Availability State
-  const [liveSlots, setLiveSlots] = useState([]);
-  const [loadingLiveSlots, setLoadingLiveSlots] = useState(false);
-  const [liveBranchId, setLiveBranchId] = useState("");
   const [branchesList, setBranchesList] = useState([]);
+  
+  // Reviews state
+  const [reviews, setReviews] = useState([]);
 
   // Auth Modal State
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -326,55 +328,52 @@ export default function LandingPage() {
     }
   }, []);
 
-  // Fetch branches and live slots
+  // Fetch branches
   useEffect(() => {
     api.get('/api/branches')
       .then(res => {
         setBranchesList(res.data);
-        if (res.data.length > 0) {
-          const initialBranch = res.data[0];
-          setLiveBranchId(initialBranch.id);
-        }
       })
       .catch(err => {
         console.error("Error fetching branches:", err);
         const fallbackBranches = [
-          { id: 'indiranagar', name: 'Eagle Box Indiranagar', location: 'Indiranagar, Bangalore', pricePerHour: 800 },
-          { id: 'koramangala', name: 'Eagle Box Koramangala', location: 'Koramangala, Bangalore', pricePerHour: 800 },
-          { id: 'hsrlayout', name: 'Eagle Box HSR Layout', location: 'HSR Layout, Bangalore', pricePerHour: 800 },
-          { id: 'whitefield', name: 'Eagle Box Whitefield', location: 'Whitefield, Bangalore', pricePerHour: 800 }
+          { id: 'nagole', name: 'Eagle Box Nagole', location: 'Nagole, Hyderabad', pricePerHour: 800 },
+          { id: 'uppal', name: 'Eagle Box Uppal', location: 'Uppal, Hyderabad', pricePerHour: 900 },
+          { id: 'gachibowli', name: 'Eagle Box Gachibowli', location: 'Gachibowli, Hyderabad', pricePerHour: 1500 },
+          { id: 'kukatpally', name: 'Eagle Box Kukatpally', location: 'Kukatpally, Hyderabad', pricePerHour: 1200 }
         ];
         setBranchesList(fallbackBranches);
-        setLiveBranchId(fallbackBranches[0].id);
       });
   }, []);
 
-  // Fetch live slots
+  // Fetch reviews
   useEffect(() => {
-    if (liveBranchId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoadingLiveSlots(true);
-      const todayStr = new Date().toISOString().split("T")[0];
-      api.get(`/api/slots?date=${todayStr}&branchId=${liveBranchId}`)
-        .then(res => {
-          setLiveSlots(res.data.slice(0, 8));
-        })
-        .catch(err => {
-          console.error("Error fetching live slots:", err);
-          setLiveSlots([
-            { id: 's1', startTime: '05:00 PM', endTime: '06:00 PM', status: 'AVAILABLE', price: 800 },
-            { id: 's2', startTime: '06:00 PM', endTime: '07:00 PM', status: 'BOOKED', price: 800 },
-            { id: 's3', startTime: '07:00 PM', endTime: '08:00 PM', status: 'AVAILABLE', price: 800 },
-            { id: 's4', startTime: '08:00 PM', endTime: '09:00 PM', status: 'AVAILABLE', price: 800 },
-            { id: 's5', startTime: '09:00 PM', endTime: '10:00 PM', status: 'BOOKED', price: 800 },
-            { id: 's6', startTime: '10:00 PM', endTime: '11:00 PM', status: 'AVAILABLE', price: 800 }
-          ]);
-        })
-        .finally(() => {
-          setLoadingLiveSlots(false);
-        });
-    }
-  }, [liveBranchId]);
+    api.get('/api/reviews/public')
+      .then(res => {
+        const fetchedReviews = res.data || [];
+        
+        // Ensure at least 10 reviews by mixing in demo data
+        const demoReviews = [
+          { id: 'd1', userName: 'Rahul R.', branch: { name: 'Eagle Box Nagole' }, rating: 5, message: 'Excellent turf quality and smooth booking experience. Highly recommended.', createdAt: new Date().toISOString() },
+          { id: 'd2', userName: 'Sandeep K.', branch: { name: 'Eagle Box Uppal' }, rating: 5, message: 'Floodlights are amazing for night matches. Will definitely book again.', createdAt: new Date().toISOString() },
+          { id: 'd3', userName: 'Praveen M.', branch: { name: 'Eagle Box Kompally' }, rating: 5, message: 'Clean facilities and good parking space.', createdAt: new Date().toISOString() },
+          { id: 'd4', userName: 'Karthik R.', branch: { name: 'Eagle Box Madhapur' }, rating: 5, message: 'Best box cricket experience in Hyderabad.', createdAt: new Date().toISOString() },
+          { id: 'd5', userName: 'Naveen P.', branch: { name: 'Eagle Box Kukatpally' }, rating: 5, message: 'Fast booking process and great support team.', createdAt: new Date().toISOString() },
+          { id: 'd6', userName: 'Arjun S.', branch: { name: 'Eagle Box Hitech' }, rating: 5, message: 'Eagle Box has the absolute best quality turf. Friendly staff.', createdAt: new Date().toISOString() },
+          { id: 'd7', userName: 'Vikram M.', branch: { name: 'Eagle Box Gachibowli' }, rating: 5, message: 'Top notch box setups. Zero dark spots in the play zone.', createdAt: new Date().toISOString() },
+          { id: 'd8', userName: 'Sneha G.', branch: { name: 'Eagle Box Kondapur' }, rating: 5, message: 'Our weekly corporate games are held here. Clean drinking water and ample parking.', createdAt: new Date().toISOString() },
+          { id: 'd9', userName: 'Manoj K.', branch: { name: 'Eagle Box Gachibowli' }, rating: 5, message: 'A great place to play with corporate friends.', createdAt: new Date().toISOString() },
+          { id: 'd10', userName: 'Ravi T.', branch: { name: 'Eagle Box Miyapur' }, rating: 5, message: 'Superb platform! Booking a slot takes only 3 clicks.', createdAt: new Date().toISOString() }
+        ];
+
+        if (fetchedReviews.length >= 10) {
+          setReviews(fetchedReviews);
+        } else {
+          setReviews([...fetchedReviews, ...demoReviews.slice(0, 10 - fetchedReviews.length)]);
+        }
+      })
+      .catch(err => console.error("Error fetching reviews:", err));
+  }, []);
 
   // Fetch notifications
   useEffect(() => {
@@ -487,42 +486,14 @@ export default function LandingPage() {
     const pendingBooking = {
       branch: mappedBranch,
       date: selectedDate || new Date().toISOString().split("T")[0],
-      time: selectedTime ? `${selectedTime}:00 - ${(parseInt(selectedTime) + 1)}:00` : "18:00 - 19:00",
-      duration: parseInt(selectedDuration),
-      amount: mappedBranch.pricePerHour * parseInt(selectedDuration),
+      time: "",
+      duration: 1,
+      amount: mappedBranch.pricePerHour,
       slotId: ""
     };
 
     localStorage.setItem("pending_booking", JSON.stringify(pendingBooking));
     
-    if (user) {
-      navigate('/customer/book');
-    } else {
-      setModalMode("login");
-      setShowAuthModal(true);
-    }
-  };
-
-  const handleSlotClick = (slotObj) => {
-    if (slotObj.status === 'BOOKED') {
-      toast.error("This slot is already booked.");
-      return;
-    }
-
-    const currentLiveBranch = branchesList.find(b => b.id === liveBranchId) || branchesList[0];
-    const todayStr = new Date().toISOString().split("T")[0];
-
-    const pendingBooking = {
-      branch: currentLiveBranch,
-      date: todayStr,
-      time: `${slotObj.startTime} - ${slotObj.endTime}`,
-      duration: 1,
-      amount: slotObj.price,
-      slotId: slotObj.id
-    };
-
-    localStorage.setItem("pending_booking", JSON.stringify(pendingBooking));
-
     if (user) {
       navigate('/customer/book');
     } else {
@@ -552,6 +523,18 @@ export default function LandingPage() {
     }
   };
 
+  const handleMembershipClick = (tier, price) => {
+    const pendingMembership = { tier, amountPaid: price };
+    localStorage.setItem("pending_membership", JSON.stringify(pendingMembership));
+
+    if (user) {
+      navigate('/customer/dashboard');
+    } else {
+      setModalMode("login");
+      setShowAuthModal(true);
+    }
+  };
+
   const handleModalLogin = async (e) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -565,6 +548,8 @@ export default function LandingPage() {
 
       if (localStorage.getItem('pending_booking')) {
         navigate('/customer/book');
+      } else if (localStorage.getItem('pending_membership')) {
+        navigate('/customer/dashboard');
       } else {
         navigate(res.data.user.role === 'ADMIN' ? '/admin/dashboard' : '/customer/dashboard');
       }
@@ -607,6 +592,8 @@ export default function LandingPage() {
 
       if (localStorage.getItem('pending_booking')) {
         navigate('/customer/book');
+      } else if (localStorage.getItem('pending_membership')) {
+        navigate('/customer/dashboard');
       } else {
         navigate('/customer/dashboard');
       }
@@ -630,6 +617,8 @@ export default function LandingPage() {
 
       if (localStorage.getItem('pending_booking')) {
         navigate('/customer/book');
+      } else if (localStorage.getItem('pending_membership')) {
+        navigate('/customer/dashboard');
       } else {
         navigate('/customer/dashboard');
       }
@@ -662,49 +651,7 @@ export default function LandingPage() {
     ? '/admin/dashboard' 
     : (token && userRole === 'CUSTOMER' ? '/customer/dashboard' : '/');
 
-  const locationsData = [
-    {
-      id: "indiranagar",
-      name: "Eagle Box Indiranagar",
-      location: "Indiranagar, Bangalore",
-      rating: 4.8,
-      price: 800,
-      amenities: ["Floodlights", "Pristine Turf", "Parking"],
-      image: "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=600&q=80",
-      rawObj: branchesList.find(b => b.name.includes("Indiranagar")) || { id: 'indiranagar', name: 'Eagle Box Indiranagar', pricePerHour: 800 }
-    },
-    {
-      id: "koramangala",
-      name: "Eagle Box Koramangala",
-      location: "Koramangala, Bangalore",
-      rating: 4.6,
-      price: 800,
-      amenities: ["Floodlights", "Premium Turf", "Drinks Kiosk"],
-      image: "https://images.unsplash.com/photo-1593341646782-e0b495cff86d?w=600&q=80",
-      rawObj: branchesList.find(b => b.name.includes("Koramangala")) || { id: 'koramangala', name: 'Eagle Box Koramangala', pricePerHour: 800 }
-    },
-    {
-      id: "hsrlayout",
-      name: "Eagle Box HSR Layout",
-      location: "HSR Layout, Bangalore",
-      rating: 4.9,
-      price: 800,
-      amenities: ["High Nets", "FIFA Grade Turf", "Shower Rooms"],
-      image: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=600&q=80",
-      rawObj: branchesList.find(b => b.name.includes("HSR Layout")) || { id: 'hsrlayout', name: 'Eagle Box HSR Layout', pricePerHour: 800 }
-    }
-  ];
 
-  const testimonialReviews = [
-    { name: "Arjun Sharma", text: "Eagle Box Indiranagar has the absolute best quality turf in Bangalore. Friendly staff and perfect lights.", rating: 5, location: "Indiranagar", avatar: "A" },
-    { name: "Pooja Reddy", text: "Instant booking and loyalty points system has saved us thousands. Playing here is pure joy.", rating: 5, location: "HSR Layout", avatar: "P" },
-    { name: "Vikram Malhotra", text: "Top notch box setups. The floodlights are bright and there are zero dark spots in the play zone.", rating: 5, location: "Koramangala", avatar: "V" },
-    { name: "Sneha G.", text: "Our weekly corporate games are held here. Clean drinking water, change rooms and ample parking.", rating: 5, location: "Whitefield", avatar: "S" },
-    { name: "Ravi Teja", text: "Superb platform! Booking a slot takes only 3 clicks and points redemption is automated.", rating: 5, location: "Jayanagar", avatar: "R" },
-    { name: "Manoj Kumar", text: "Marathahalli branch is huge and turf is pristine. A great place to play with corporate friends.", rating: 5, location: "Marathahalli", avatar: "M" },
-    { name: "Neeraja Patel", text: "We enjoy weekend tournaments here. Standard rules, transparent scoreboard, and amazing vibes.", rating: 5, location: "HSR Layout", avatar: "N" },
-    { name: "Hassan Ali", text: "Great pricing structure. The membership clubs have already paid for themselves with discount credits.", rating: 5, location: "Indiranagar", avatar: "H" }
-  ];
 
   return (
     <div className="landing-page-root min-h-screen relative selection:bg-[#22C55E]/20 selection:text-black">
@@ -932,10 +879,10 @@ export default function LandingPage() {
                   <div className="border-t border-[#EEEDE8] pt-3 flex justify-between items-center">
                     <div>
                       <span className="text-[9px] text-[#8A8A8A] font-bold uppercase tracking-wider block">Customer</span>
-                      <span className="text-xs font-bold text-[#1A1A1A]">Rahul Sharma</span>
+                      <span className="text-xs font-bold text-[#1A1A1A]">John Doe</span>
                     </div>
                     <div className="bg-[#22C55E]/10 border border-[#22C55E]/20 text-[#16A34A] text-xs font-black px-3 py-1 rounded-xl">
-                      ₹800.00
+                      ₹900.00
                     </div>
                   </div>
                 </div>
@@ -973,7 +920,7 @@ export default function LandingPage() {
               <div className="text-3xl md:text-4xl font-black text-[#1A1A1A]">
                 {stats.locations} Locations
               </div>
-              <div className="text-[10px] font-bold text-[#8A8A8A] uppercase tracking-widest mt-1">Across Bangalore</div>
+              <div className="text-[10px] font-bold text-[#8A8A8A] uppercase tracking-widest mt-1">Across Hyderabad</div>
             </div>
           </div>
         </div>
@@ -984,7 +931,7 @@ export default function LandingPage() {
       {/* 3. SMART BOOKING SEARCH */}
       <section className="relative -mt-10 px-6 z-20">
         <div className="max-w-6xl mx-auto bg-white border border-[#EEEDE8] rounded-[32px] shadow-xl p-8 relative overflow-hidden">
-          <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end relative z-10">
+          <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end relative z-10">
             <div className="space-y-2">
               <label className="block text-xs font-black text-[#8A8A8A] uppercase tracking-widest">Select Location</label>
               <div className="relative">
@@ -996,10 +943,9 @@ export default function LandingPage() {
                   required
                 >
                   <option value="">Select Branch</option>
-                  <option value="Indiranagar">Indiranagar</option>
-                  <option value="Koramangala">Koramangala</option>
-                  <option value="HSR Layout">HSR Layout</option>
-                  <option value="Whitefield">Whitefield</option>
+                  {branchesList.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1024,40 +970,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-xs font-black text-[#8A8A8A] uppercase tracking-widest">Ideal Time</label>
-              <div className="relative">
-                <Clock className="absolute left-4 top-[18px] h-5 w-5 text-[#8A8A8A]" />
-                <select 
-                  className="w-full bg-[#FAFAF7] border border-[#EEEDE8] text-[#1A1A1A] pl-12 pr-4 py-4 rounded-2xl text-base font-bold outline-none focus:border-[#22C55E] appearance-none"
-                  value={selectedTime}
-                  onChange={(e) => setSelectedTime(e.target.value)}
-                  required
-                >
-                  <option value="">Select Time</option>
-                  <option value="17">05:00 PM</option>
-                  <option value="18">06:00 PM</option>
-                  <option value="19">07:00 PM</option>
-                  <option value="20">08:00 PM</option>
-                  <option value="21">09:00 PM</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-xs font-black text-[#8A8A8A] uppercase tracking-widest">Duration</label>
-              <select 
-                className="w-full bg-[#FAFAF7] border border-[#EEEDE8] px-5 py-4 rounded-2xl text-base font-bold text-[#1A1A1A] outline-none focus:border-[#22C55E] appearance-none"
-                value={selectedDuration}
-                onChange={(e) => setSelectedDuration(e.target.value)}
-              >
-                <option value="1">1 Hour</option>
-                <option value="2">2 Hours</option>
-                <option value="3">3 Hours</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-4 mt-2">
+            <div className="md:col-span-1 mt-2">
               <button 
                 type="submit" 
                 className="w-full bg-[#22C55E] hover:bg-[#16A34A] text-white py-4.5 rounded-2xl font-extrabold shadow-lg shadow-green-500/15 transition-all text-base flex items-center justify-center gap-2.5 cursor-pointer btn-shine-sweep"
@@ -1069,106 +982,31 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 4. LIVE AVAILABILITY SECTION */}
-      <section id="features" className="py-24 px-6 bg-gradient-to-b from-white to-[#FAFAF7]">
-        <div className="max-w-6xl mx-auto">
-          <div className="bg-white border border-[#EEEDE8] rounded-[32px] shadow-sm p-8 sm:p-10 relative overflow-hidden fade-up">
-            
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#EEEDE8] pb-6 mb-6">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22C55E] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#22C55E]"></span>
-                  </span>
-                  <h2 className="text-3xl font-black text-[#1A1A1A] tracking-tight sm:text-4xl">Live Slot Availability</h2>
-                </div>
-                <p className="text-sm sm:text-base text-[#8A8A8A] font-semibold mt-1">Check current slot schedules across locations today.</p>
-              </div>
-              
-              <select 
-                className="bg-[#FAFAF7] border border-[#EEEDE8] px-5 py-3.5 rounded-2xl text-sm font-bold text-[#1A1A1A] outline-none focus:border-[#22C55E]"
-                value={liveBranchId}
-                onChange={(e) => setLiveBranchId(e.target.value)}
-              >
-                {branchesList.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
+      {/* 4. FEATURES SECTION */}
+      <section id="features" className="py-24 px-6 bg-[#FAFAF7] border-t border-[#EEEDE8]">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center max-w-xl mx-auto mb-16 space-y-3 fade-up">
+            <h2 className="text-4xl font-black text-[#1A1A1A] tracking-tight">Why Choose EagleBox?</h2>
+            <p className="text-[#8A8A8A] text-sm font-medium">Experience the best box cricket facilities in Hyderabad.</p>
+          </div>
 
-            {/* Slots grid */}
-            {loadingLiveSlots ? (
-              <div className="py-12 flex flex-col items-center justify-center text-[#8A8A8A] gap-3">
-                <Loader2 className="w-8 h-8 animate-spin text-[#22C55E]" />
-                <span className="text-xs font-bold uppercase tracking-wider">Loading slot board...</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              { title: "Premium Turf Grounds", desc: "High-quality cricket box grounds with professional turf.", icon: "🏏" },
+              { title: "Floodlights", desc: "Play day or night under professional lighting.", icon: "💡" },
+              { title: "Instant Online Booking", desc: "Book your preferred slot in seconds.", icon: "📱" },
+              { title: "Loyalty Rewards", desc: "Earn points for every booking and redeem rewards.", icon: "🎁" },
+              { title: "Membership Plans", desc: "Flexible plans with prepaid slot benefits.", icon: "👥" },
+              { title: "Instant Email Confirmation", desc: "Receive booking confirmation immediately.", icon: "📧" },
+              { title: "Multiple Hyderabad Locations", desc: "Book grounds across Hyderabad.", icon: "📍" },
+              { title: "Secure Reservations", desc: "Prevent double-booking and ensure slot accuracy.", icon: "🔒" }
+            ].map((feature, idx) => (
+              <div key={idx} className="bg-white border border-[#EEEDE8] hover:border-[#22C55E] p-6 rounded-2xl flex flex-col items-start transition-all hover:shadow-lg hover:-translate-y-1 fade-up">
+                <div className="text-4xl mb-4">{feature.icon}</div>
+                <h3 className="text-lg font-black text-[#1A1A1A] mb-2">{feature.title}</h3>
+                <p className="text-sm text-[#8A8A8A] font-medium leading-relaxed">{feature.desc}</p>
               </div>
-            ) : liveSlots.length === 0 ? (
-              <div className="text-center text-[#8A8A8A] py-12 text-sm font-semibold">
-                No slots scheduled for today.
-              </div>
-            ) : (
-              <div className="relative -mx-8 sm:-mx-10 px-8 sm:px-10">
-                <div className="flex flex-row overflow-x-auto gap-4 scrollbar-none pb-4 select-none">
-                  {liveSlots.map((slot, i) => {
-                    const isBooked = slot.status === 'BOOKED';
-                    // Design specific "Filling Fast" indicator border on select slots
-                    const isFillingFast = !isBooked && (i % 3 === 2);
-                    
-                    return (
-                      <button
-                        key={slot.id}
-                        onClick={() => handleSlotClick(slot)}
-                        disabled={isBooked}
-                        className={`flex-shrink-0 w-[calc((100%-1.5rem)/2.35)] sm:w-[calc((100%-3rem)/3.35)] py-8 px-6 rounded-2xl border text-center transition-all group relative ${
-                          isBooked
-                            ? 'bg-[#F5F5F0] border-[#EEEDE8] text-[#8A8A8A] line-through cursor-not-allowed'
-                            : isFillingFast
-                              ? 'bg-white border-2 border-[#A3E635] text-[#16A34A] hover:bg-[#A3E635] hover:text-[#1A1A1A] font-black hover:scale-[1.02] cursor-pointer'
-                              : 'bg-white border-2 border-[#22C55E] text-[#22C55E] hover:bg-[#22C55E] hover:text-white font-black hover:scale-[1.02] cursor-pointer'
-                        }`}
-                      >
-                        <span className={`block text-xs font-black uppercase tracking-widest ${
-                          isFillingFast 
-                            ? 'text-[#A3E635] group-hover:text-inherit' 
-                            : 'opacity-60'
-                        }`}>TODAY</span>
-                        <span className="block font-black text-2xl sm:text-3xl my-1.5">{slot.startTime}</span>
-                        <span className="text-sm font-black block mt-2">
-                          {isBooked ? 'Booked' : `₹${slot.price}`}
-                        </span>
-
-                        {!isBooked && (
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-36 bg-[#1A1A1A] text-white text-xs rounded-lg py-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-xl z-20 font-bold">
-                            {isFillingFast ? '🔥 Filling Fast!' : '🟢 Available'}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* Subtle right-aligned fade-out overlay */}
-                <div className="absolute top-0 right-0 bottom-4 w-20 bg-gradient-to-l from-white via-white/80 to-transparent pointer-events-none z-10" />
-              </div>
-            )}
-
-            {/* Live updated indicators */}
-            <div className="flex items-center gap-4 text-xs font-bold text-[#8A8A8A] uppercase tracking-widest mt-6 pt-4 border-t border-[#EEEDE8]">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-white border-2 border-[#22C55E]"></span> Available
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-white border-2 border-[#A3E635]"></span> Filling Fast
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-[#F5F5F0] border border-[#EEEDE8]"></span> Booked
-              </span>
-              <span className="ml-auto text-xs text-[#8A8A8A] font-bold flex items-center gap-1 normal-case">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] pulse-live-dot"></span> Last updated just now
-              </span>
-            </div>
-
+            ))}
           </div>
         </div>
       </section>
@@ -1178,75 +1016,12 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-xl mx-auto mb-16 space-y-3 fade-up">
             <h2 className="text-4xl font-black text-[#1A1A1A] tracking-tight">Our Premium Arenas</h2>
-            <p className="text-[#8A8A8A] text-sm font-medium">Explore Bangalore's finest sports box environments designed for champions.</p>
+            <p className="text-[#8A8A8A] text-sm font-medium">Explore Hyderabad's finest sports box environments designed for champions.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {locationsData.map((loc, idx) => (
-              <div key={idx} className="bg-white rounded-[20px] border border-[#EEEDE8] shadow-sm overflow-hidden flex flex-col group relative transition-all duration-350 hover:-translate-y-1.5 hover:shadow-[0_10px_35px_-8px_rgba(34,197,94,0.15)] hover:border-[#22C55E]/30 fade-up">
-                {/* Image 16:9 */}
-                <div className="relative aspect-[16/9] overflow-hidden bg-[#FAFAF7]">
-                  <img 
-                    src={loc.image} 
-                    alt={loc.name} 
-                    className="w-full h-full object-cover img-zoom"
-                  />
-                  {/* Top Right Available Badge */}
-                  <div className="absolute top-4 right-4 bg-[#22C55E] text-white text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-sm">
-                    Available
-                  </div>
-
-                  {/* Hover green gradient overlay */}
-                  <div className="absolute inset-0 card-overlay opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-300">
-                    <button 
-                      onClick={() => handleBookNowClick(loc.rawObj)}
-                      className="bg-white text-[#16A34A] hover:bg-[#FAFAF7] font-black text-xs px-6 py-3 rounded-full shadow-lg transition-all transform scale-90 group-hover:scale-100 duration-300 cursor-pointer border-none"
-                    >
-                      Book Now →
-                    </button>
-                  </div>
-                </div>
-
-                {/* Body */}
-                <div className="p-6 flex-grow flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-lg font-black text-[#1A1A1A] group-hover:text-[#22C55E] transition-colors duration-200">
-                      {loc.name}
-                    </h3>
-                    
-                    <div className="flex items-center gap-1 text-xs text-[#8A8A8A] mt-1.5 font-medium">
-                      <span>📍</span> {loc.location}
-                    </div>
-
-                    {/* Rating (Green Stars) */}
-                    <div className="flex items-center gap-1 mt-2.5">
-                      <span className="text-[#22C55E] text-sm">⭐</span>
-                      <span className="text-xs font-bold text-[#1A1A1A]">{loc.rating}</span>
-                      <span className="text-[10px] text-[#8A8A8A] font-semibold">(Verified)</span>
-                    </div>
-
-                    {/* Amenity Chips */}
-                    <div className="flex flex-wrap gap-1.5 mt-4">
-                      {loc.amenities.map((item, i) => (
-                        <span key={i} className="text-[9px] bg-[#FAFAF7] border border-[#EEEDE8] text-[#8A8A8A] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-md">
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Bottom Row */}
-                  <div className="mt-6 pt-4 border-t border-[#EEEDE8] flex items-center justify-between">
-                    <div>
-                      <span className="text-[8px] text-[#8A8A8A] block font-bold uppercase tracking-wider">Starting rate</span>
-                      <span className="text-lg font-black text-[#22C55E]">₹{loc.price}<span className="text-xs font-medium text-[#8A8A8A]">/hr</span></span>
-                    </div>
-                    <Link to={`/venues/${loc.id}`} className="text-xs font-extrabold text-[#22C55E] hover:text-[#16A34A] flex items-center gap-1 transition-colors">
-                      Explore Turf →
-                    </Link>
-                  </div>
-                </div>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {branchesList.map((branch, idx) => (
+              <PremiumVenueCard key={branch.id || idx} branch={branch} onImageClick={(b) => setSelectedPreviewVenue(b)} />
             ))}
           </div>
         </div>
@@ -1257,7 +1032,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-xl mx-auto mb-16 space-y-3 fade-up">
             <h2 className="text-4xl font-black text-[#1A1A1A] tracking-tight">Why Choose Eagle Box?</h2>
-            <p className="text-[#8A8A8A] text-sm font-medium">World-class amenities and tech integration tailored for Bangalore's cricketers.</p>
+            <p className="text-[#8A8A8A] text-sm font-medium">World-class amenities and tech integration tailored for Hyderabad's cricketers.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -1295,292 +1070,205 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 7. PLAYER REVIEWS */}
-      <section className="py-24 bg-[#FAFAF7] border-t border-b border-[#EEEDE8] overflow-hidden relative marquee-container">
-        <div className="text-center max-w-xl mx-auto mb-16 px-6 fade-up">
-          <h2 className="text-4xl font-black text-[#1A1A1A] tracking-tight">Verified Player Reviews</h2>
-          <p className="text-[#8A8A8A] text-sm font-medium">Join 15,000+ active players hitting standard boundaries every day.</p>
-        </div>
 
-        {/* Marquee Row 1: Left */}
-        <div className="relative w-full overflow-hidden flex mb-6">
-          <div className="absolute top-0 bottom-0 left-0 w-32 bg-gradient-to-r from-[#FAFAF7] to-transparent z-10 pointer-events-none" />
-          <div className="absolute top-0 bottom-0 right-0 w-32 bg-gradient-to-l from-[#FAFAF7] to-transparent z-10 pointer-events-none" />
-          
-          <div className="marquee-left gap-6 py-2">
-            {testimonialReviews.concat(testimonialReviews).map((rev, idx) => (
-              <div key={`left-${idx}`} className="bg-white border border-[#EEEDE8] p-6 rounded-2xl w-80 shadow-sm shrink-0 flex flex-col justify-between hover:border-[#22C55E]/40 transition-all select-none">
-                <div>
-                  {/* Stars (Green Stars) */}
-                  <div className="flex text-[#22C55E] gap-0.5 mb-3">
-                    {[...Array(5)].map((_, i) => (
-                      <svg key={i} className="w-3.5 h-3.5 fill-[#22C55E] text-[#22C55E]" viewBox="0 0 24 24">
-                        <path d="M12 .587l3.668 7.431 8.2 1.192-5.934 5.787 1.4 8.168L12 18.896l-7.334 3.857 1.4-8.168L.132 9.21l8.2-1.192z"/>
-                      </svg>
-                    ))}
-                  </div>
-                  <p className="text-sm text-[#1A1A1A] italic leading-relaxed">"{rev.text}"</p>
-                </div>
-                
-                <div className="flex items-center gap-3 pt-4 border-t border-[#EEEDE8] mt-4">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#22C55E] to-[#16A34A] flex items-center justify-center font-black text-sm text-white uppercase shadow-sm">
-                    {rev.avatar}
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-xs text-[#1A1A1A] flex items-center gap-1.5">
-                      {rev.name}
-                      <span className="text-[9px] text-[#22C55E] font-black bg-[#22C55E]/10 px-1.5 py-0.5 rounded uppercase">Verified</span>
-                    </h4>
-                    <span className="text-[9px] text-[#8A8A8A] block font-bold uppercase tracking-wider">{rev.location} Venue</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Marquee Row 2: Right */}
-        <div className="relative w-full overflow-hidden flex">
-          <div className="absolute top-0 bottom-0 left-0 w-32 bg-gradient-to-r from-[#FAFAF7] to-transparent z-10 pointer-events-none" />
-          <div className="absolute top-0 bottom-0 right-0 w-32 bg-gradient-to-l from-[#FAFAF7] to-transparent z-10 pointer-events-none" />
-          
-          <div className="marquee-right gap-6 py-2">
-            {testimonialReviews.concat(testimonialReviews).reverse().map((rev, idx) => (
-              <div key={`right-${idx}`} className="bg-white border border-[#EEEDE8] p-6 rounded-2xl w-80 shadow-sm shrink-0 flex flex-col justify-between hover:border-[#22C55E]/40 transition-all select-none">
-                <div>
-                  {/* Stars */}
-                  <div className="flex text-[#22C55E] gap-0.5 mb-3">
-                    {[...Array(5)].map((_, i) => (
-                      <svg key={i} className="w-3.5 h-3.5 fill-[#22C55E] text-[#22C55E]" viewBox="0 0 24 24">
-                        <path d="M12 .587l3.668 7.431 8.2 1.192-5.934 5.787 1.4 8.168L12 18.896l-7.334 3.857 1.4-8.168L.132 9.21l8.2-1.192z"/>
-                      </svg>
-                    ))}
-                  </div>
-                  <p className="text-sm text-[#1A1A1A] italic leading-relaxed">"{rev.text}"</p>
-                </div>
-                
-                <div className="flex items-center gap-3 pt-4 border-t border-[#EEEDE8] mt-4">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#22C55E] to-[#16A34A] flex items-center justify-center font-black text-sm text-white uppercase shadow-sm">
-                    {rev.avatar}
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-xs text-[#1A1A1A] flex items-center gap-1.5">
-                      {rev.name}
-                      <span className="text-[9px] text-[#22C55E] font-black bg-[#22C55E]/10 px-1.5 py-0.5 rounded uppercase">Verified</span>
-                    </h4>
-                    <span className="text-[9px] text-[#8A8A8A] block font-bold uppercase tracking-wider">{rev.location} Venue</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* 8. MEMBERSHIP PLANS */}
       <section id="membership" className="py-24 px-6 max-w-7xl mx-auto">
         <div className="text-center max-w-xl mx-auto mb-16 space-y-4 fade-up">
-          <h2 className="text-4xl font-black text-[#1A1A1A] tracking-tight">Membership Clubs</h2>
-          <p className="text-[#8A8A8A] text-sm font-medium">Unlock priority slots, billing discount rates, and multiplier reward points.</p>
-          
-          {/* Billing Switcher */}
-          <div className="inline-flex items-center gap-1 bg-[#F5F5F0] border border-[#EEEDE8] p-1.5 rounded-2xl">
-            <button 
-              type="button"
-              onClick={() => setIsYearly(false)}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border-none ${
-                !isYearly 
-                  ? 'bg-[#22C55E] text-white shadow-md' 
-                  : 'text-[#8A8A8A] hover:text-[#1A1A1A] bg-transparent'
-              }`}
-            >
-              Monthly
-            </button>
-            <button 
-              type="button"
-              onClick={() => setIsYearly(true)}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border-none flex items-center gap-1.5 ${
-                isYearly 
-                  ? 'bg-[#22C55E] text-white shadow-md' 
-                  : 'text-[#8A8A8A] hover:text-[#1A1A1A] bg-transparent'
-              }`}
-            >
-              Yearly
-              <span className="bg-white/20 text-[9px] font-black tracking-wide uppercase px-2 py-0.5 rounded-md text-white">Save 20%</span>
-            </button>
-          </div>
+          <h2 className="text-4xl font-black text-[#1A1A1A] tracking-tight">Prepaid Slot Packages</h2>
+          <p className="text-[#8A8A8A] text-sm font-medium">Buy slots in bulk, book anytime without worrying about price surges, and earn 50 Loyalty Points on every game.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           
-          {/* Free Tier */}
-          <div className="bg-white border border-[#EEEDE8] shadow-sm rounded-[24px] p-10 flex flex-col justify-between hover:border-[#22C55E]/30 transition-all relative fade-up">
+          {/* Starter Plan */}
+          <div className="bg-white border border-[#EEEDE8] shadow-sm rounded-[24px] p-8 flex flex-col justify-between hover:border-[#22C55E]/30 transition-all relative fade-up">
             <div>
-              <h3 className="text-xl font-extrabold text-[#1A1A1A] mb-1">Free / Guest</h3>
-              <p className="text-xs text-[#8A8A8A] font-semibold mb-6">Standard entrance pay-per-play access.</p>
+              <h3 className="text-xl font-extrabold text-[#1A1A1A] mb-1">Starter</h3>
+              <p className="text-xs text-[#8A8A8A] font-semibold mb-6">Perfect for weekend warriors.</p>
               
               <div className="mb-6 flex items-baseline gap-1">
-                <span className="text-5xl font-black text-[#1A1A1A]">₹0</span>
-                <span className="text-sm text-[#8A8A8A] font-semibold">/month</span>
+                <span className="text-4xl font-black text-[#1A1A1A]">₹3,999</span>
               </div>
               
               <ul className="space-y-4 text-sm text-[#8A8A8A] font-medium">
-                <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  Standard booking rates
+                <li className="flex items-center gap-2.5 text-[#1A1A1A]">
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  <strong>4 Prepaid Slots</strong>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  1x Rewards points system
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  Valid for 1 Month
                 </li>
-                <li className="flex items-center gap-2.5 opacity-40 line-through">
-                  <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[#8A8A8A] shrink-0 font-bold text-xs">✗</span>
-                  Flat booking discount rates
+                <li className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  Book any available slot
                 </li>
-                <li className="flex items-center gap-2.5 opacity-40 line-through">
-                  <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[#8A8A8A] shrink-0 font-bold text-xs">✗</span>
-                  Priority reservation schedules
+                <li className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  50 Loyalty Points / booking
                 </li>
               </ul>
             </div>
             
-            <button onClick={() => handleBookNowClick()} className="w-full mt-10 py-3.5 rounded-xl font-bold transition-all text-sm bg-[#F5F5F0] hover:bg-[#EEEDE8] text-[#1A1A1A] border-none cursor-pointer">
-              Get Started
+            <button onClick={() => handleMembershipClick('STARTER', 3999)} className="w-full mt-8 py-3.5 rounded-xl font-bold transition-all text-sm bg-[#F5F5F0] hover:bg-[#EEEDE8] text-[#1A1A1A] border-none cursor-pointer">
+              Buy Starter
             </button>
           </div>
 
-          {/* Silver Tier */}
-          <div className="bg-white border border-[#EEEDE8] shadow-sm rounded-[24px] p-10 flex flex-col justify-between hover:border-[#22C55E]/30 transition-all relative fade-up">
+          {/* Pro Plan */}
+          <div className="bg-white border-2 border-[#22C55E] shadow-xl rounded-[24px] p-8 flex flex-col justify-between hover:shadow-2xl transition-all relative fade-up">
+            <div className="absolute top-0 right-1/2 translate-y-[-50%] translate-x-[50%] bg-[#22C55E] text-white text-[10px] font-black tracking-widest uppercase py-1.5 px-4 rounded-full shadow-md whitespace-nowrap">
+              Most Popular
+            </div>
+            
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <h3 className="text-xl font-extrabold text-[#1A1A1A]">Silver Club</h3>
-                {isYearly && (
-                  <span className="bg-[#22C55E]/10 text-[#16A34A] border border-[#22C55E]/20 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">Save ₹1,200</span>
-                )}
-              </div>
-              <p className="text-xs text-[#8A8A8A] font-semibold mb-6">Designed for casual weekly squad play.</p>
+              <h3 className="text-xl font-extrabold text-[#1A1A1A] mb-1">Pro</h3>
+              <p className="text-xs text-[#8A8A8A] font-semibold mb-6">Designed for casual weekly squads.</p>
               
               <div className="mb-6 flex items-baseline gap-1">
-                <span className="text-5xl font-black text-[#22C55E]">{isYearly ? '₹399' : '₹499'}</span>
-                <span className="text-sm text-[#8A8A8A] font-semibold">/month</span>
+                <span className="text-4xl font-black text-[#22C55E]">₹10,999</span>
               </div>
               
               <ul className="space-y-4 text-sm text-[#8A8A8A] font-medium">
-                <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  <strong>5% Flat Booking Discount</strong>
+                <li className="flex items-center gap-2.5 text-[#1A1A1A]">
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  <strong>12 Prepaid Slots</strong>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  Priority customer support
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  Valid for 3 Months
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  1.2x Rewards points multiplier
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  Priority booking access
                 </li>
-                <li className="flex items-center gap-2.5 opacity-40 line-through">
-                  <span className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[#8A8A8A] shrink-0 font-bold text-xs">✗</span>
-                  Free gear rentals (Bats/Pads)
+                <li className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  50 Loyalty Points / booking
                 </li>
               </ul>
             </div>
             
-            <button onClick={() => handleBookNowClick()} className="w-full mt-10 py-3.5 rounded-xl font-bold transition-all text-sm bg-[#F5F5F0] hover:bg-[#EEEDE8] text-[#1A1A1A] border-none cursor-pointer">
-              Subscribe Now
+            <button onClick={() => handleMembershipClick('PRO', 10999)} className="w-full mt-8 py-3.5 rounded-xl font-bold transition-all text-sm bg-[#22C55E] hover:bg-[#16A34A] text-white border-none cursor-pointer shadow-lg shadow-green-500/15">
+              Buy Pro
             </button>
           </div>
 
-          {/* Platinum Tier */}
-          <div className="bg-white border-2 border-[#22C55E] shadow-xl rounded-[24px] p-10 flex flex-col justify-between hover:shadow-2xl transition-all relative fade-up">
-            <div className="absolute top-0 right-1/2 translate-y-[-50%] translate-x-[50%] bg-[#22C55E] text-white text-[10px] font-black tracking-widest uppercase py-1.5 px-5 rounded-full shadow-md">
-              🏆 Most Popular
-            </div>
-            
+          {/* Elite Plan */}
+          <div className="bg-white border border-[#EEEDE8] shadow-sm rounded-[24px] p-8 flex flex-col justify-between hover:border-[#3b82f6]/30 transition-all relative fade-up">
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <h3 className="text-xl font-extrabold text-[#1A1A1A]">Platinum Club</h3>
-                {isYearly && (
-                  <span className="bg-[#22C55E]/10 text-[#16A34A] border border-[#22C55E]/20 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">Save ₹4,800</span>
-                )}
-              </div>
-              <p className="text-xs text-[#8A8A8A] font-semibold mb-6">Built for die-hard corporate leagues.</p>
+              <h3 className="text-xl font-extrabold text-[#1A1A1A] mb-1">Elite</h3>
+              <p className="text-xs text-[#8A8A8A] font-semibold mb-6">For teams playing multiple times a week.</p>
               
               <div className="mb-6 flex items-baseline gap-1">
-                <span className="text-5xl font-black text-[#22C55E]">{isYearly ? '₹1,599' : '₹1,999'}</span>
-                <span className="text-sm text-[#8A8A8A] font-semibold">/month</span>
+                <span className="text-4xl font-black text-[#1A1A1A]">₹19,999</span>
               </div>
               
               <ul className="space-y-4 text-sm text-[#8A8A8A] font-medium">
-                <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  <strong>20% Flat Booking Discount</strong>
+                <li className="flex items-center gap-2.5 text-[#1A1A1A]">
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  <strong>37 Prepaid Slots</strong>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  <strong>Free Premium Bat & Ball Rentals</strong>
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  Valid for 6 Months
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  <strong>2x Loyalty Points Multiplier</strong>
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  Exclusive member offers
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
-                  VIP early bracket reservations
+                  <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">✓</span>
+                  50 Loyalty Points / booking
                 </li>
               </ul>
             </div>
             
-            <button onClick={() => handleBookNowClick()} className="w-full mt-10 py-3.5 rounded-xl font-bold transition-all text-sm bg-[#22C55E] hover:bg-[#16A34A] text-white border-none cursor-pointer shadow-lg shadow-green-500/15 btn-shine-sweep">
-              Upgrade Now
+            <button onClick={() => handleMembershipClick('ELITE', 19999)} className="w-full mt-8 py-3.5 rounded-xl font-bold transition-all text-sm bg-[#F5F5F0] hover:bg-[#EEEDE8] text-[#1A1A1A] border-none cursor-pointer">
+              Buy Elite
+            </button>
+          </div>
+
+          {/* Champion Plan */}
+          <div className="bg-[#1A1A1A] border border-[#333] shadow-sm rounded-[24px] p-8 flex flex-col justify-between hover:border-[#8b5cf6]/50 transition-all relative fade-up">
+            <div className="absolute top-0 right-1/2 translate-y-[-50%] translate-x-[50%] bg-[#8b5cf6] text-white text-[10px] font-black tracking-widest uppercase py-1.5 px-4 rounded-full shadow-md whitespace-nowrap">
+              Premium
+            </div>
+
+            <div>
+              <h3 className="text-xl font-extrabold text-white mb-1">Champion</h3>
+              <p className="text-xs text-white/60 font-semibold mb-6">The ultimate VIP year-round experience.</p>
+              
+              <div className="mb-6 flex items-baseline gap-1">
+                <span className="text-4xl font-black text-white">₹29,999</span>
+              </div>
+              
+              <ul className="space-y-4 text-sm text-white/80 font-medium">
+                <li className="flex items-center gap-2.5 text-white">
+                  <span className="w-5 h-5 rounded-full bg-[#8b5cf6]/20 flex items-center justify-center text-[#a78bfa] shrink-0 font-bold text-xs">✓</span>
+                  <strong>50 Prepaid Slots</strong>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#8b5cf6]/20 flex items-center justify-center text-[#a78bfa] shrink-0 font-bold text-xs">✓</span>
+                  Valid for 12 Months
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#8b5cf6]/20 flex items-center justify-center text-[#a78bfa] shrink-0 font-bold text-xs">✓</span>
+                  VIP priority & tournaments
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#8b5cf6]/20 flex items-center justify-center text-[#a78bfa] shrink-0 font-bold text-xs">✓</span>
+                  Premium support
+                </li>
+              </ul>
+            </div>
+            
+            <button onClick={() => handleMembershipClick('CHAMPION', 29999)} className="w-full mt-8 py-3.5 rounded-xl font-bold transition-all text-sm bg-white hover:bg-gray-100 text-[#1A1A1A] border-none cursor-pointer">
+              Buy Champion
             </button>
           </div>
 
         </div>
+      </section>
 
-        {/* COMPARISON TABLE */}
-        <div className="mt-20 overflow-x-auto border border-[#EEEDE8] rounded-[24px] bg-white shadow-sm fade-up">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-[#EEEDE8] bg-[#FAFAF7] text-[#1A1A1A] font-black uppercase tracking-wider">
-                <th className="py-5 px-6 text-sm">Features & Perks</th>
-                <th className="py-5 px-6 text-center text-sm">Free</th>
-                <th className="py-5 px-6 text-center text-sm">Silver</th>
-                <th className="py-5 px-6 text-center text-sm">Platinum</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#EEEDE8] font-bold text-[#8A8A8A]">
-              <tr className="bg-white hover:bg-[#FAFAF7]/50 transition-colors">
-                <td className="py-5 px-6 text-[#1A1A1A] font-extrabold text-sm">Hourly Booking Discount</td>
-                <td className="py-5 px-6 text-center">None</td>
-                <td className="py-5 px-6 text-center text-[#22C55E]">5% Off</td>
-                <td className="py-5 px-6 text-center text-[#16A34A] font-black">20% Off</td>
-              </tr>
-              <tr className="bg-[#FAFAF7] hover:bg-white/50 transition-colors">
-                <td className="py-5 px-6 text-[#1A1A1A] font-extrabold text-sm">Rewards Multiplier</td>
-                <td className="py-5 px-6 text-center">1x Points</td>
-                <td className="py-5 px-6 text-center">1.2x Points</td>
-                <td className="py-5 px-6 text-center text-[#16A34A] font-black">2x Points</td>
-              </tr>
-              <tr className="bg-white hover:bg-[#FAFAF7]/50 transition-colors">
-                <td className="py-5 px-6 text-[#1A1A1A] font-extrabold text-sm">Free Bat & Gear Rentals</td>
-                <td className="py-5 px-6 text-center">✗</td>
-                <td className="py-5 px-6 text-center text-[#22C55E]">✓ (Standard)</td>
-                <td className="py-5 px-6 text-center text-[#16A34A] font-black">✓ (Premium)</td>
-              </tr>
-              <tr className="bg-[#FAFAF7] hover:bg-white/50 transition-colors">
-                <td className="py-5 px-6 text-[#1A1A1A] font-extrabold text-sm">Cancellation Window</td>
-                <td className="py-5 px-6 text-center">24 Hours</td>
-                <td className="py-5 px-6 text-center">12 Hours</td>
-                <td className="py-5 px-6 text-center text-[#16A34A] font-black">4 Hours</td>
-              </tr>
-              <tr className="bg-white hover:bg-[#FAFAF7]/50 transition-colors">
-                <td className="py-5 px-6 text-[#1A1A1A] font-extrabold text-sm">Priority Slot Reservations</td>
-                <td className="py-5 px-6 text-center">✗</td>
-                <td className="py-5 px-6 text-center text-[#22C55E]">✓</td>
-                <td className="py-5 px-6 text-center text-[#16A34A] font-black">✓</td>
-              </tr>
-            </tbody>
-          </table>
+      {/* 8.5 REVIEWS SECTION */}
+      <section className="py-24 bg-slate-50 border-t border-slate-100 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 mb-16 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-50 text-green-600 rounded-full text-xs font-black tracking-widest mb-4 border border-green-100">
+            <Star className="w-3.5 h-3.5 fill-current" />
+            COMMUNITY
+          </div>
+          <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
+            What Players Say About <span className="text-[#22C55E]">EagleBox</span>
+          </h2>
+        </div>
+        
+        <div className="relative w-full overflow-hidden flex marquee-container py-8">
+          <div className="absolute top-0 bottom-0 left-0 w-32 bg-gradient-to-r from-slate-50 to-transparent z-10 pointer-events-none" />
+          <div className="absolute top-0 bottom-0 right-0 w-32 bg-gradient-to-l from-slate-50 to-transparent z-10 pointer-events-none" />
+          
+          <div className="marquee-right gap-6 px-3">
+            {reviews.concat(reviews).map((r, idx) => (
+              <div key={`rev-${idx}`} className="w-[340px] md:w-[400px] shrink-0 bg-white p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 transition-transform duration-300 hover:-translate-y-2 select-none">
+                <div className="flex items-center gap-1 mb-4 text-[#22C55E]">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className={`w-5 h-5 ${i < r.rating ? 'fill-current' : 'text-slate-200'}`} />
+                  ))}
+                </div>
+                <p className="text-slate-700 font-medium mb-6 leading-relaxed italic">"{r.message}"</p>
+                <div className="flex items-center gap-4 mt-auto pt-6 border-t border-slate-100">
+                  <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                    {r.userName?.charAt(0) || 'A'}
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-slate-900">{r.userName || 'Anonymous'}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{r.branch?.name || 'Eagle Box Cricket'}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -1589,7 +1277,7 @@ export default function LandingPage() {
         
         {/* Top stats bar */}
         <div className="max-w-7xl mx-auto pb-10 border-b border-white/10 flex flex-col sm:flex-row items-center justify-between text-xs font-black uppercase tracking-widest text-[#8A8A8A] gap-4">
-          <span>🏏 OVER 50,000 PITCHES RESERVED ACROSS BANGALORE</span>
+          <span>🏏 OVER 50,000 PITCHES RESERVED ACROSS HYDERABAD</span>
           <span className="text-[#22C55E]">● 24/7 SUPPORT ACTIVE</span>
         </div>
 
@@ -1599,25 +1287,28 @@ export default function LandingPage() {
               <span className="font-extrabold">Eagle<span className="text-[#22C55E]">Box</span></span>
             </Link>
             <p className="text-sm text-white/60 leading-relaxed font-medium">
-              The premier box cricket booking and loyalty platform in Bangalore. Rent fields under lights and play instantly.
+              EagleBox is Hyderabad's premium cricket box booking platform. Book high-quality turf grounds, manage memberships, earn loyalty rewards, and play instantly across multiple Hyderabad locations.
             </p>
           </div>
 
           <div>
             <h4 className="font-black text-xs text-white uppercase tracking-widest mb-6">Locations</h4>
             <ul className="space-y-3.5 text-sm font-semibold">
-              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Indiranagar Arena</Link></li>
-              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Koramangala Arena</Link></li>
-              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">HSR Layout Arena</Link></li>
+              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Nagole Arena</Link></li>
+              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Uppal Arena</Link></li>
+              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Gachibowli Arena</Link></li>
+              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Kukatpally Arena</Link></li>
+              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Madhapur Arena</Link></li>
+              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Kompally Arena</Link></li>
             </ul>
           </div>
 
           <div>
-            <h4 className="font-black text-xs text-white uppercase tracking-widest mb-6">Quick Links</h4>
+            <h4 className="font-black text-xs text-white uppercase tracking-widest mb-6">Contact Us</h4>
             <ul className="space-y-3.5 text-sm font-semibold">
-              <li><a href="#features" onClick={(e) => handleAnchorClick(e, 'features')} className="text-white/60 hover:text-[#22C55E] transition-colors">Features</a></li>
-              <li><Link to="/venues" className="text-white/60 hover:text-[#22C55E] transition-colors">Venues</Link></li>
-              <li><a href="#membership" onClick={(e) => handleAnchorClick(e, 'membership')} className="text-white/60 hover:text-[#22C55E] transition-colors">Memberships</a></li>
+              <li><a href="mailto:eagleboxbookings@gmail.com" className="text-white/60 hover:text-[#22C55E] transition-colors">eagleboxbookings@gmail.com</a></li>
+              <li className="text-white/60">+91 98765 43210</li>
+              <li className="text-white/60">Hyderabad, Telangana, India</li>
             </ul>
           </div>
 
@@ -1627,39 +1318,37 @@ export default function LandingPage() {
               <div className="flex gap-3">
                 {/* Social circles */}
                 <a href="#" className="w-10 h-10 rounded-full bg-[#22C55E]/15 border border-[#22C55E]/20 text-[#22C55E] hover:bg-[#22C55E] hover:text-black flex items-center justify-center transition-colors">
-                  <span className="font-bold text-sm">IG</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
                 </a>
                 <a href="#" className="w-10 h-10 rounded-full bg-[#22C55E]/15 border border-[#22C55E]/20 text-[#22C55E] hover:bg-[#22C55E] hover:text-black flex items-center justify-center transition-colors">
-                  <span className="font-bold text-sm">YT</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
                 </a>
                 <a href="#" className="w-10 h-10 rounded-full bg-[#22C55E]/15 border border-[#22C55E]/20 text-[#22C55E] hover:bg-[#22C55E] hover:text-black flex items-center justify-center transition-colors">
-                  <span className="font-bold text-sm">WA</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
                 </a>
               </div>
-              <p className="text-xs text-white/50 font-bold uppercase tracking-widest">Bangalore, India</p>
+              <p className="text-xs text-white/50 font-bold uppercase tracking-widest">Hyderabad, India</p>
             </div>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-white/50 font-bold uppercase tracking-widest gap-4">
-          <div>Made with 🏏 in Bangalore</div>
+          <div>Made with 🏏 in Hyderabad</div>
           <div className="flex gap-6">
             <a href="#" className="hover:text-[#22C55E] transition-colors">Terms</a>
             <a href="#" className="hover:text-[#22C55E] transition-colors">Privacy</a>
             <a href="#" className="hover:text-[#22C55E] transition-colors">Refunds</a>
-          </div>
+            {/* Preview Modal */}
+      {selectedPreviewVenue && (
+        <VenuePreviewModal 
+          branch={selectedPreviewVenue} 
+          onClose={() => setSelectedPreviewVenue(null)} 
+        />
+      )}
+
+    </div>
         </div>
       </footer>
-
-      {/* 10. STICKY FLOATING BOOK NOW CTA */}
-      {showFloatButton && (!user || user.role === 'CUSTOMER') && (
-        <button 
-          onClick={() => handleBookNowClick()}
-          className="fixed bottom-6 right-6 bg-[#22C55E] hover:bg-[#16A34A] text-white py-3.5 px-6 rounded-full font-bold shadow-2xl hover:scale-105 active:scale-95 transition-all z-40 flex items-center gap-2 cursor-pointer border-none shadow-green-500/10 btn-shine-sweep"
-        >
-          Book a Slot 🏏
-        </button>
-      )}
 
       {/* 11. AUTHENTICATION MODAL GATEWAY */}
       {showAuthModal && (
@@ -1766,7 +1455,7 @@ export default function LandingPage() {
                       required
                       value={authName}
                       onChange={(e) => setAuthName(e.target.value)}
-                      placeholder="Rahul Sharma"
+                      placeholder="John Doe"
                       className="block w-full px-3 py-2.5 bg-[#FAFAF7] border border-[#EEEDE8] rounded-xl focus:border-[#22C55E] text-slate-800 text-sm focus:bg-white outline-none font-bold"
                     />
                   </div>

@@ -56,4 +56,16 @@ router.patch("/read-all", authenticateToken, async (req, res) => {
   }
 });
 
+// Clear all notifications
+router.delete("/clear", authenticateToken, async (req, res) => {
+  try {
+    await prisma.notification.deleteMany({
+      where: { userId: req.user.userId }
+    });
+    res.json({ message: "All notifications cleared" });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 module.exports = router;

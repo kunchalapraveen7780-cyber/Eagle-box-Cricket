@@ -3,3 +3,8 @@ node_modules/
 project.zip
 .DS_Store
 dist/
+
+Eagle_box_cricket.zip
+backend/prisma/dev.backup.db
+old_admin.txt
+recovered_admin_dashboard.json

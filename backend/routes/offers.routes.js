@@ -19,7 +19,7 @@ router.get("/", authenticateToken, async (req, res) => {
 router.post("/validate", authenticateToken, async (req, res) => {
   const code = req.body.code;
   const amount = req.body.amount !== undefined && req.body.amount !== null ? req.body.amount : req.body.bookingAmount;
-  
+
   if (!code) return res.status(400).json({ error: "Offer code is required" });
   if (amount === undefined || amount === null) return res.status(400).json({ error: "Amount/bookingAmount is required" });
 
@@ -45,7 +45,7 @@ router.post("/validate", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const tier = user.membershipTier; // NONE, SILVER, GOLD, PLATINUM
+    const tier = user.membershipTier; // NONE, STARTER, PRO, ELITE, CHAMPION
     if (offer.targetSegment !== "ALL" && offer.targetSegment !== tier) {
       return res.status(400).json({ error: `This offer is only available for ${offer.targetSegment} tier members.` });
     }
