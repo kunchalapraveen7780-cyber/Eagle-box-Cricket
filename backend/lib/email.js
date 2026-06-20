@@ -1,20 +1,7 @@
 const nodemailer = require('nodemailer');
 const prisma = require('./prisma');
 
-// Configure Nodemailer for Gmail SMTP
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  family: 4, // Force IPv4 to prevent ENETUNREACH IPv6 routing errors
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  connectionTimeout: 60000,
-  greetingTimeout: 30000,
-  socketTimeout: 60000
-});
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbynNKNMN5FjlsVgrrzyW5ZXvQsPd902Ka3gWJ-Rtp3_h1SFMyp_OS1DQBbf4EXkwyT7qQ/exec";
 
 const sendEmail = async ({ to, subject, html, userId = null, template = "default" }) => {
   try {
@@ -25,18 +12,23 @@ const sendEmail = async ({ to, subject, html, userId = null, template = "default
     console.log(`Content:\n${html.replace(/<[^>]*>?/gm, '')}`);
     console.log(`---------------------------------------\n`);
 
-    // If environment variables are missing, simulate success (development fallback)
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.warn('⚠️ EMAIL_USER or EMAIL_PASS not configured in .env. Skipping actual dispatch.');
-      return { simulated: true, to, subject };
-    }
-
-    const info = await transporter.sendMail({
-      from: `"EagleBox Cricket" <${process.env.EMAIL_USER}>`,
-      to,
-      subject,
-      html
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: to,
+        subject: subject,
+        html: html
+      })
     });
+
+    const info = await response.json();
+    
+    if (!info.success) {
+      throw new Error(info.error || "Failed to send email via Google Apps Script");
+    }
 
     await prisma.emailLog.create({
       data: {
