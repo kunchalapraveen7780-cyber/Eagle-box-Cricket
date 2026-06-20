@@ -53,7 +53,7 @@ router.post("/redeem", authenticateToken, async (req, res) => {
     // Send Email
     if (result.updatedUser.email) {
       const { sendEmail, templates } = require('../lib/email');
-      await sendEmail({
+      sendEmail({
         to: result.updatedUser.email,
         subject: "Your Loyalty Coupon - EagleBox",
         html: templates.couponGenerated(result.updatedUser.name, code, discountAmount)

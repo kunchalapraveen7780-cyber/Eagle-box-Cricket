@@ -208,7 +208,7 @@ router.post("/", authenticateToken, async (req, res) => {
       const groundName = result.branchData ? result.branchData.name : "Eagle Box Cricket";
       const branchLocation = result.branchData ? result.branchData.location : "Main Arena, Bengaluru";
 
-      await sendEmail({
+      sendEmail({
         to: result.user.email,
         subject: "Booking Confirmed - Eagle Box Cricket",
         html: templates.bookingConfirmation(
@@ -371,7 +371,7 @@ router.patch("/:bookingId/cancel", authenticateToken, async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: booking.userId } });
     if (user && user.email) {
       const { sendEmail } = require('../lib/email');
-      await sendEmail({
+      sendEmail({
         to: user.email,
         subject: "Booking Cancelled - Eagle Box Cricket",
         html: `<p>Hi ${user.name}, your booking for ${booking.slot.date} at ${booking.slot.startTime} has been cancelled.</p>`

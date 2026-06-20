@@ -282,7 +282,7 @@ router.post("/membership/purchase", authenticateToken, async (req, res) => {
     // Send Membership Purchase Email
     if (updatedUser.email) {
       const { sendEmail, templates } = require('../lib/email');
-      await sendEmail({
+      sendEmail({
         to: updatedUser.email,
         subject: `Welcome to ${tier} Membership! - Eagle Box Cricket`,
         html: templates.membershipPurchase(updatedUser.name, tier, amountPaid)
