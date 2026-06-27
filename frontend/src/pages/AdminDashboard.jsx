@@ -20,7 +20,8 @@ export default function AdminDashboard() {
   const [bookings, setBookings] = useState([]);
   const [topCustomers, setTopCustomers] = useState([]);
   const [venueAnalytics, setVenueAnalytics] = useState([]);
-  const [, setReferrals] = useState([]);
+  const [venueSummary, setVenueSummary] = useState(null);
+  const [showLiveSlots, setShowLiveSlots] = useState(false);
   const [reviews, setReviews] = useState([]);
   const [slotLocks, setSlotLocks] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -29,6 +30,7 @@ export default function AdminDashboard() {
   const [adminTicketResponse, setAdminTicketResponse] = useState("");
   const [membershipStats, setMembershipStats] = useState(null);
   const [loyaltyStats, setLoyaltyStats] = useState(null);
+  const [, setReferrals] = useState([]);
   const [commStats, setCommStats] = useState(null);
 
   // Search/Filter states
@@ -63,8 +65,9 @@ export default function AdminDashboard() {
         const res = await api.get('/api/slots/admin/slot-locks');
         setSlotLocks(res.data);
       } else if (activeTab === "venues") {
-        const venueRes = await api.get("/api/admin/venue-analytics");
-        setVenueAnalytics(venueRes.data);
+        const venueRes = await api.get(`/api/admin/venue-analytics?date=${selectedDate}`);
+        setVenueAnalytics(venueRes.data.branches || []);
+        setVenueSummary(venueRes.data.summary || null);
       } else if (activeTab === "revenue") {
         const res = await api.get("/api/admin/revenue-analytics");
         setStats(res.data);
@@ -633,38 +636,149 @@ export default function AdminDashboard() {
             {/* TAB: VENUES */}
             {activeTab === "venues" && (
               <div className="space-y-8 animate-in fade-in duration-500">
+                
+                {/* Header Actions */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => {
+                        const d = new Date(selectedDate);
+                        d.setDate(d.getDate() - 1);
+                        setSelectedDate(d.toLocaleDateString('en-CA'));
+                      }} 
+                      className="p-2 border rounded-xl hover:bg-slate-50 transition-colors"
+                    >
+                      <ChevronLeft className="w-5 h-5 text-slate-600" />
+                    </button>
+                    
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                      />
+                      <Calendar className="w-5 h-5 text-slate-400 absolute left-3 top-3" />
+                    </div>
+                    
+                    <button 
+                      onClick={() => {
+                        const d = new Date(selectedDate);
+                        d.setDate(d.getDate() + 1);
+                        setSelectedDate(d.toLocaleDateString('en-CA'));
+                      }} 
+                      className="p-2 border rounded-xl hover:bg-slate-50 transition-colors"
+                    >
+                      <ChevronRight className="w-5 h-5 text-slate-600" />
+                    </button>
+                    
+                    <button 
+                      onClick={() => setSelectedDate(new Date().toLocaleDateString('en-CA'))}
+                      className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-200 transition-colors"
+                    >
+                      Today
+                    </button>
+                  </div>
+                  
+                  <button 
+                    onClick={() => setShowLiveSlots(true)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-green-500/20 transition-all"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                    Live Slots
+                  </button>
+                </div>
+
+                {/* Summary Cards */}
+                {venueSummary && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Bookings</p>
+                        <h4 className="text-2xl font-black text-slate-800 mt-1">{venueSummary.totalBookings}</h4>
+                      </div>
+                      <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
+                        <Activity className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Confirmed</p>
+                        <h4 className="text-2xl font-black text-emerald-600 mt-1">{venueSummary.confirmedBookings}</h4>
+                      </div>
+                      <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Cancelled</p>
+                        <h4 className="text-2xl font-black text-red-600 mt-1">{venueSummary.cancelledBookings}</h4>
+                      </div>
+                      <div className="w-10 h-10 rounded-full bg-red-50 text-red-500 flex items-center justify-center">
+                        <XCircle className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-5 rounded-2xl shadow-sm text-white flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase text-white/80 tracking-wider">Revenue</p>
+                        <h4 className="text-2xl font-black mt-1">₹{venueSummary.revenue.toLocaleString()}</h4>
+                      </div>
+                      <div className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center">
+                        <IndianRupee className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {venueAnalytics.map(v => (
-                    <div key={v.id} className="bg-white rounded-3xl border border-[#EEEDE8] p-6 shadow-sm flex flex-col">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                    <div key={v.id} className="bg-white rounded-3xl border border-[#EEEDE8] p-6 shadow-sm flex flex-col relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-50 to-transparent rounded-bl-full -z-10 transition-transform group-hover:scale-110" />
+                      
+                      <div className="flex justify-between items-start mb-4 z-10">
+                        <div className="w-12 h-12 bg-white shadow-sm border border-slate-100 text-blue-600 rounded-xl flex items-center justify-center">
                           <MapPin className="w-6 h-6" />
                         </div>
-                        <span className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase">Live Status</span>
+                        <div className="text-right">
+                          <span className="block px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase">Daily Stats</span>
+                          <span className="block mt-1 text-xs font-bold text-emerald-600">₹{v.revenue.toLocaleString()}</span>
+                        </div>
                       </div>
-                      <h4 className="text-lg font-black text-slate-900">{v.name}</h4>
+                      <h4 className="text-xl font-black text-slate-900 z-10">{v.name}</h4>
                       
-                      <div className="mt-6 space-y-3">
+                      <div className="mt-6 space-y-3 z-10">
                         <div className="flex justify-between text-xs font-bold">
                           <span className="text-slate-500">Total Slots</span>
-                          <span className="text-slate-900">{v.totalSlots}</span>
+                          <span className="text-slate-900 bg-slate-100 px-2 py-0.5 rounded">{v.totalSlots}</span>
                         </div>
                         <div className="flex justify-between text-xs font-bold">
-                          <span className="text-slate-500">Booked</span>
-                          <span className="text-emerald-600">{v.bookedSlots}</span>
+                          <span className="text-slate-500">Booked Slots</span>
+                          <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{v.bookedSlots}</span>
                         </div>
                         <div className="flex justify-between text-xs font-bold">
-                          <span className="text-slate-500">Available</span>
-                          <span className="text-slate-900">{v.availableSlots}</span>
+                          <span className="text-slate-500">Available Slots</span>
+                          <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{v.availableSlots}</span>
                         </div>
                         
-                        <div className="pt-3 border-t border-slate-100">
-                          <div className="flex justify-between text-xs font-bold mb-1">
-                            <span className="text-slate-500">Occupancy</span>
+                        <div className="pt-4 mt-2 border-t border-slate-100">
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <p className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Peak Hour</p>
+                              <p className="text-xs font-bold text-slate-800 mt-0.5">{v.peakHour}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] text-slate-400 uppercase font-black tracking-wider">Least Booked</p>
+                              <p className="text-xs font-bold text-slate-800 mt-0.5">{v.leastBookedTime}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between text-xs font-bold mb-1.5">
+                            <span className="text-slate-500 uppercase text-[10px] tracking-wider">Occupancy</span>
                             <span className="text-blue-600">{v.occupancy}%</span>
                           </div>
-                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                            <div className="bg-blue-500 h-full transition-all" style={{width: `${v.occupancy}%`}} />
+                          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                            <div className="bg-gradient-to-r from-blue-400 to-blue-600 h-full transition-all duration-1000 ease-out" style={{width: `${v.occupancy}%`}} />
                           </div>
                         </div>
                       </div>
@@ -1392,6 +1506,92 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Slots Modal */}
+      {showLiveSlots && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowLiveSlots(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+              <div>
+                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                  Live Slots Viewer
+                </h3>
+                <p className="text-sm font-bold text-slate-500 mt-1">{new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
+              <button onClick={() => setShowLiveSlots(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-8 bg-slate-50/30">
+              {venueAnalytics.map(v => (
+                <div key={v.id} className="bg-white rounded-2xl border border-[#EEEDE8] shadow-sm overflow-hidden">
+                  <div className="bg-slate-50 p-4 border-b border-[#EEEDE8]">
+                    <h4 className="text-base font-black text-slate-800">{v.name}</h4>
+                  </div>
+                  <div className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                    {v.slots?.map(slot => {
+                      const isToday = selectedDate === new Date().toLocaleDateString('en-CA');
+                      
+                      // Convert slot start time to Date for comparison
+                      let isLiveNow = false;
+                      if (isToday) {
+                        const now = new Date();
+                        const timeStr = slot.startTime; // e.g. "06:00 AM"
+                        const match = timeStr.match(/(\d{2}):(\d{2})\s(AM|PM)/);
+                        if (match) {
+                          let h = parseInt(match[1]);
+                          if (match[3] === 'PM' && h !== 12) h += 12;
+                          if (match[3] === 'AM' && h === 12) h = 0;
+                          
+                          // Check if current time is within this 1-hour slot
+                          if (now.getHours() === h) {
+                            isLiveNow = true;
+                          }
+                        }
+                      }
+
+                      return (
+                        <div 
+                          key={slot.id} 
+                          className={`relative p-3 rounded-xl border flex flex-col items-center text-center transition-all ${
+                            isLiveNow ? 'border-green-400 shadow-[0_0_15px_rgba(74,222,128,0.3)] ring-2 ring-green-400 bg-green-50' :
+                            slot.status === 'CONFIRMED' ? 'border-blue-200 bg-blue-50/50' :
+                            slot.status === 'CANCELLED' ? 'border-red-200 bg-red-50/50' :
+                            slot.status === 'COMPLETED' ? 'border-slate-300 bg-slate-100' :
+                            'border-slate-100 hover:border-slate-300 bg-white'
+                          }`}
+                        >
+                          {isLiveNow && (
+                            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-green-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap z-10">
+                              Live Now
+                            </div>
+                          )}
+                          <span className="text-xs font-black text-slate-700 mb-2">{slot.startTime}</span>
+                          <span className={`px-2 py-1 text-[9px] font-black rounded-md uppercase tracking-wider w-full truncate ${
+                            slot.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-700' :
+                            slot.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                            slot.status === 'COMPLETED' ? 'bg-slate-200 text-slate-600' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {slot.status === 'Available' ? 'AVAILABLE' : (slot.status === 'CONFIRMED' ? 'BOOKED' : slot.status)}
+                          </span>
+                          {slot.status === 'CONFIRMED' && slot.bookedBy && (
+                            <span className="text-[9px] font-bold text-slate-500 mt-1.5 truncate w-full" title={slot.bookedBy}>
+                              {slot.bookedBy}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

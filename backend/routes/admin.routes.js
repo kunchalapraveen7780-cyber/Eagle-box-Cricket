@@ -621,31 +621,107 @@ router.get("/top-customers", authenticateToken, requireAdmin, async (req, res) =
 // --- NEW VENUE ANALYTICS ---
 router.get("/venue-analytics", authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { date } = req.query;
+    // Default to today in local time
+    const targetDate = date || new Date().toLocaleDateString('en-CA');
+
     const branches = await prisma.branch.findMany({
       include: {
         slots: {
+          where: { date: targetDate },
           include: {
-            bookings: true
-          }
+            bookings: {
+              include: { user: { select: { name: true } } }
+            }
+          },
+          orderBy: { startTime: 'asc' }
         }
       }
     });
 
-    const today = new Date().toISOString().split('T')[0];
+    const summary = {
+      totalBookings: 0,
+      confirmedBookings: 0,
+      cancelledBookings: 0,
+      revenue: 0,
+      totalSlots: 0,
+      bookedSlots: 0,
+      availableSlots: 0
+    };
+
+    const defaultTimes = [
+      "06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM", 
+      "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM",
+      "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM"
+    ];
 
     const analytics = branches.map(branch => {
-      const todaysSlots = branch.slots.filter(s => s.date === today);
-      const totalSlots = todaysSlots.length;
+      const todaysSlots = branch.slots || [];
+      const totalSlots = todaysSlots.length > 0 ? todaysSlots.length : 16;
       let bookedSlots = 0;
-      let revenue = 0;
+      let branchRevenue = 0;
+      const timeCounts = {};
+      const slotsData = [];
 
-      todaysSlots.forEach(slot => {
-        const validBookings = slot.bookings.filter(b => b.status === "CONFIRMED");
-        if (validBookings.length > 0) {
+      // Map existing slots or generate virtual ones if none exist
+      const slotsToProcess = todaysSlots.length > 0 ? todaysSlots : defaultTimes.map(t => ({
+        startTime: t,
+        endTime: t.replace(/(\d{2}):00 (AM|PM)/, (m, h, p) => {
+          let nextH = parseInt(h) + 1;
+          let nextP = p;
+          if (nextH === 12) { nextP = p === "AM" ? "PM" : "AM"; }
+          if (nextH > 12) { nextH = 1; }
+          return `${nextH.toString().padStart(2, '0')}:00 ${nextP}`;
+        }),
+        bookings: []
+      }));
+
+      slotsToProcess.forEach(slot => {
+        const confirmedBookings = slot.bookings.filter(b => ["CONFIRMED", "COMPLETED", "PENDING"].includes(b.status));
+        const cancelledBookingsList = slot.bookings.filter(b => b.status === "CANCELLED");
+        
+        let slotStatus = "Available";
+        let bookedBy = null;
+        
+        if (confirmedBookings.length > 0) {
+          slotStatus = confirmedBookings[0].status; // e.g. CONFIRMED
+          bookedBy = confirmedBookings[0].user?.name || 'Guest';
           bookedSlots++;
-          revenue += validBookings.reduce((sum, b) => sum + b.amountPaid, 0);
+          branchRevenue += confirmedBookings.reduce((sum, b) => sum + (b.amountPaid || 0), 0);
+          
+          summary.confirmedBookings += confirmedBookings.length;
+          summary.totalBookings += confirmedBookings.length;
+          summary.revenue += confirmedBookings.reduce((sum, b) => sum + (b.amountPaid || 0), 0);
+          
+          timeCounts[slot.startTime] = (timeCounts[slot.startTime] || 0) + 1;
         }
+        
+        summary.cancelledBookings += cancelledBookingsList.length;
+        summary.totalBookings += cancelledBookingsList.length;
+
+        slotsData.push({
+          id: slot.id || Math.random().toString(),
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          status: slotStatus,
+          bookedBy
+        });
       });
+
+      summary.totalSlots += totalSlots;
+      summary.bookedSlots += bookedSlots;
+
+      // Calculate Most/Least/Peak
+      let mostBookedTime = "N/A";
+      let leastBookedTime = "N/A";
+      let peakHour = "N/A";
+      
+      const sortedTimes = Object.entries(timeCounts).sort((a, b) => b[1] - a[1]);
+      if (sortedTimes.length > 0) {
+        mostBookedTime = sortedTimes[0][0];
+        peakHour = sortedTimes[0][0];
+        leastBookedTime = sortedTimes[sortedTimes.length - 1][0];
+      }
 
       const occupancy = totalSlots > 0 ? ((bookedSlots / totalSlots) * 100).toFixed(1) : 0;
 
@@ -656,11 +732,21 @@ router.get("/venue-analytics", authenticateToken, requireAdmin, async (req, res)
         bookedSlots,
         availableSlots: totalSlots - bookedSlots,
         occupancy,
-        revenue
+        revenue: branchRevenue,
+        mostBookedTime,
+        leastBookedTime,
+        peakHour,
+        slots: slotsData
       };
     });
 
-    res.json(analytics);
+    summary.availableSlots = summary.totalSlots - summary.bookedSlots;
+    summary.overallOccupancy = summary.totalSlots > 0 ? ((summary.bookedSlots / summary.totalSlots) * 100).toFixed(1) : 0;
+
+    res.json({
+      summary,
+      branches: analytics
+    });
   } catch (err) {
     console.error("Venue analytics err", err);
     res.status(500).json({ error: "Server error" });
