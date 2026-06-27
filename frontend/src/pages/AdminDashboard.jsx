@@ -43,6 +43,13 @@ export default function AdminDashboard() {
   const [dailyBookingStats, setDailyBookingStats] = useState(null);
   const [selectedBookingDetails, setSelectedBookingDetails] = useState(null);
 
+  // Loyalty states
+  const [loyaltySearchQuery, setLoyaltySearchQuery] = useState("");
+  const [loyaltyFilter, setLoyaltyFilter] = useState("ALL");
+  const [selectedLoyaltyCustomer, setSelectedLoyaltyCustomer] = useState(null);
+  const [customerLoyaltyHistory, setCustomerLoyaltyHistory] = useState([]);
+  const [loadingLoyaltyHistory, setLoadingLoyaltyHistory] = useState(false);
+
   const loadActiveTabData = useCallback(async () => {
     try {
       if (activeTab === "overview") {
@@ -138,6 +145,19 @@ export default function AdminDashboard() {
       }
     };
   }, [loadActiveTabData]);
+
+  const fetchLoyaltyHistory = async (customerId) => {
+    try {
+      setLoadingLoyaltyHistory(true);
+      const res = await api.get(`/api/admin/loyalty-analytics/customer/${customerId}/history`);
+      setCustomerLoyaltyHistory(res.data);
+    } catch (error) {
+      console.error("Failed to fetch loyalty history", error);
+      toast.error("Failed to load timeline.");
+    } finally {
+      setLoadingLoyaltyHistory(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -1007,6 +1027,7 @@ export default function AdminDashboard() {
             {/* TAB: LOYALTY */}
             {activeTab === "loyalty" && loyaltyStats && (
               <div className="space-y-8 animate-in fade-in duration-500">
+                {/* 1. Global Lifetime Summaries */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <div className="bg-gradient-to-br from-yellow-400 to-orange-500 text-white p-6 rounded-3xl shadow-lg flex flex-col justify-between">
                     <div>
@@ -1036,6 +1057,268 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                 </div>
+
+                {/* 2. Monthly Analytics */}
+                {loyaltyStats.monthlyStats && (
+                  <div>
+                    <h3 className="text-lg font-black tracking-tight mb-4 text-slate-800">This Month's Performance</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                        <h4 className="text-xl font-black text-blue-600">{loyaltyStats.monthlyStats.pointsIssuedThisMonth}</h4>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">Points Issued</p>
+                      </div>
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                        <h4 className="text-xl font-black text-emerald-600">{loyaltyStats.monthlyStats.pointsRedeemedThisMonth}</h4>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">Points Redeemed</p>
+                      </div>
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                        <h4 className="text-xl font-black text-purple-600">{loyaltyStats.monthlyStats.newLoyaltyMembersThisMonth}</h4>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">New Members</p>
+                      </div>
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                        <h4 className="text-xl font-black text-orange-600">{loyaltyStats.monthlyStats.couponsGeneratedThisMonth}</h4>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">Coupons Gen.</p>
+                      </div>
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                        <h4 className="text-xl font-black text-pink-600">{loyaltyStats.monthlyStats.referralRewardsGivenThisMonth}</h4>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">Referral Rewards</p>
+                      </div>
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+                        <h4 className="text-xl font-black text-teal-600">{loyaltyStats.monthlyStats.bookingRewardsGivenThisMonth}</h4>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">Booking Rewards</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                  {/* 3. Leaderboard */}
+                  <div className="xl:col-span-1 space-y-4">
+                    <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+                      <Award className="w-5 h-5 text-yellow-500" /> Top 10 Loyal Customers
+                    </h3>
+                    <div className="bg-white rounded-3xl border border-[#EEEDE8] shadow-sm overflow-hidden flex flex-col gap-0">
+                      {loyaltyStats.topCustomers?.map((c, i) => (
+                        <div key={c.id} className="p-4 border-b border-slate-100 flex items-center gap-4 hover:bg-slate-50 transition-colors last:border-b-0 cursor-pointer" onClick={() => { setSelectedLoyaltyCustomer(c); fetchLoyaltyHistory(c.id); }}>
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${
+                            i === 0 ? 'bg-yellow-100 text-yellow-600' :
+                            i === 1 ? 'bg-slate-200 text-slate-600' :
+                            i === 2 ? 'bg-orange-100 text-orange-700' :
+                            'bg-slate-50 text-slate-400'
+                          }`}>
+                            {i === 0 ? <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" /> : `#${i + 1}`}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-bold text-slate-800 truncate">{c.name}</h4>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-black text-slate-400 uppercase">{c.membership}</span>
+                              <span className="text-[10px] text-slate-300">•</span>
+                              <span className="text-[10px] font-bold text-slate-500">{c.completedBookingsCount} Bookings</span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="block text-sm font-black text-emerald-600">{c.currentPoints} pts</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 4. Full Data Table */}
+                  <div className="xl:col-span-2 space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <h3 className="text-lg font-black tracking-tight text-slate-800">Customer Loyalty Database</h3>
+                      <div className="flex flex-col md:flex-row gap-3">
+                        <div className="relative">
+                          <input 
+                            type="text" 
+                            placeholder="Search name or email..." 
+                            value={loyaltySearchQuery}
+                            onChange={(e) => setLoyaltySearchQuery(e.target.value)}
+                            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl font-medium text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 w-full md:w-64"
+                          />
+                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                        </div>
+                        <select
+                          value={loyaltyFilter}
+                          onChange={(e) => setLoyaltyFilter(e.target.value)}
+                          className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-700 focus:outline-none"
+                        >
+                          <option value="ALL">All Members</option>
+                          <option value="ACTIVE">Active Users</option>
+                          <option value="INACTIVE">Inactive Users</option>
+                          <option value="STARTER">Starter Tier</option>
+                          <option value="PRO">Pro Tier</option>
+                          <option value="ELITE">Elite Tier</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-3xl border border-[#EEEDE8] shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-[1000px]">
+                          <thead>
+                            <tr className="border-b border-slate-100 bg-slate-50/50">
+                              <th className="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Rank</th>
+                              <th className="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Customer</th>
+                              <th className="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider text-center">Membership</th>
+                              <th className="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider text-center">Earned</th>
+                              <th className="py-4 px-4 text-[10px] font-black text-emerald-600 uppercase tracking-wider text-center bg-emerald-50/50 rounded-t-lg">Available</th>
+                              <th className="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider text-center">Redeemed</th>
+                              <th className="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider text-center">Coupons Value</th>
+                              <th className="py-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Last Activity</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {loyaltyStats.allCustomers?.filter(c => {
+                              const matchesSearch = c.name.toLowerCase().includes(loyaltySearchQuery.toLowerCase()) || c.email.toLowerCase().includes(loyaltySearchQuery.toLowerCase());
+                              const matchesFilter = loyaltyFilter === 'ALL' || 
+                                (loyaltyFilter === 'ACTIVE' && c.status === 'Active') ||
+                                (loyaltyFilter === 'INACTIVE' && c.status === 'Inactive') ||
+                                c.membership.toUpperCase() === loyaltyFilter;
+                              return matchesSearch && matchesFilter;
+                            }).map((c, i) => (
+                              <tr key={c.id} onClick={() => { setSelectedLoyaltyCustomer(c); fetchLoyaltyHistory(c.id); }} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors cursor-pointer group">
+                                <td className="py-3 px-4">
+                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black ${
+                                    c.rank === 1 ? 'bg-yellow-100 text-yellow-700' :
+                                    c.rank === 2 ? 'bg-slate-200 text-slate-700' :
+                                    c.rank === 3 ? 'bg-orange-100 text-orange-700' :
+                                    'text-slate-400'
+                                  }`}>
+                                    {c.rank === 1 ? '🥇' : c.rank === 2 ? '🥈' : c.rank === 3 ? '🥉' : `#${c.rank}`}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <p className="text-sm font-bold text-slate-800 group-hover:text-green-600 transition-colors">{c.name}</p>
+                                  <p className="text-[10px] text-slate-500 truncate max-w-[150px]">{c.email}</p>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className={`px-2.5 py-1 text-[10px] font-black rounded-md uppercase tracking-wider ${
+                                    c.membership === 'STARTER' ? 'bg-blue-100 text-blue-700' :
+                                    c.membership === 'PRO' ? 'bg-purple-100 text-purple-700' :
+                                    c.membership === 'ELITE' || c.membership === 'CHAMPION' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-slate-100 text-slate-500'
+                                  }`}>{c.membership}</span>
+                                </td>
+                                <td className="py-3 px-4 text-center font-bold text-slate-700">{c.totalEarned}</td>
+                                <td className="py-3 px-4 text-center font-black text-emerald-600 bg-emerald-50/30 group-hover:bg-emerald-50/50 transition-colors">{c.currentPoints}</td>
+                                <td className="py-3 px-4 text-center font-bold text-slate-500">{c.totalRedeemed}</td>
+                                <td className="py-3 px-4 text-center font-bold text-blue-600">₹{c.totalCouponValueRedeemed}</td>
+                                <td className="py-3 px-4">
+                                  {c.lastActivity ? (
+                                    <span className="text-[11px] font-semibold text-slate-600">{new Date(c.lastActivity).toLocaleDateString()}</span>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400">None</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Customer Details Drawer */}
+                {selectedLoyaltyCustomer && (
+                  <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedLoyaltyCustomer(null)}>
+                    <div className="bg-white w-full max-w-md h-full shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-300" onClick={e => e.stopPropagation()}>
+                      <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
+                        <div>
+                          <h3 className="text-xl font-black text-slate-800">{selectedLoyaltyCustomer.name}</h3>
+                          <span className={`px-2 py-0.5 text-[9px] font-black rounded-full uppercase tracking-wider mt-1 inline-block ${
+                            selectedLoyaltyCustomer.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {selectedLoyaltyCustomer.status}
+                          </span>
+                        </div>
+                        <button onClick={() => setSelectedLoyaltyCustomer(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                          <X className="w-5 h-5 text-slate-500" />
+                        </button>
+                      </div>
+
+                      <div className="overflow-y-auto flex-1 p-6 space-y-6">
+                        {/* Profile Summary */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase">Available Points</p>
+                            <p className="text-2xl font-black text-emerald-600 mt-0.5">{selectedLoyaltyCustomer.currentPoints}</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase">Total Earned</p>
+                            <p className="text-2xl font-black text-slate-800 mt-0.5">{selectedLoyaltyCustomer.totalEarned}</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase">Total Redeemed</p>
+                            <p className="text-xl font-black text-slate-600 mt-0.5">{selectedLoyaltyCustomer.totalRedeemed}</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase">Total Bookings</p>
+                            <p className="text-xl font-black text-blue-600 mt-0.5">{selectedLoyaltyCustomer.completedBookingsCount}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 pt-2">
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="font-bold text-slate-500">Membership Tier</span>
+                            <span className="font-black text-slate-800">{selectedLoyaltyCustomer.membership}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="font-bold text-slate-500">Coupons Generated</span>
+                            <span className="font-black text-slate-800">{selectedLoyaltyCustomer.couponsCount}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="font-bold text-slate-500">Total Referrals (Given/Got)</span>
+                            <span className="font-black text-slate-800">{selectedLoyaltyCustomer.referralsCount}</span>
+                          </div>
+                        </div>
+
+                        {/* Timeline */}
+                        <div className="pt-4 border-t border-slate-100">
+                          <h4 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-blue-500" /> Loyalty History
+                          </h4>
+                          
+                          {loadingLoyaltyHistory ? (
+                            <div className="flex justify-center py-8">
+                              <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
+                            </div>
+                          ) : customerLoyaltyHistory.length === 0 ? (
+                            <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+                              <p className="text-sm font-semibold text-slate-500">No loyalty points activity yet.</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-4 relative before:absolute before:inset-0 before:ml-2.5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
+                              {customerLoyaltyHistory.map((t, idx) => (
+                                <div key={idx} className="relative flex items-start gap-4">
+                                  <div className={`w-5 h-5 rounded-full border-2 border-white shadow-sm flex items-center justify-center shrink-0 z-10 ${
+                                    t.pointsAdded > 0 ? 'bg-emerald-500' : 'bg-red-500'
+                                  }`}>
+                                    {t.pointsAdded > 0 ? <Check className="w-2.5 h-2.5 text-white" /> : <TrendingUp className="w-2.5 h-2.5 text-white rotate-180" />}
+                                  </div>
+                                  <div className="flex-1 bg-white p-3 rounded-xl border border-slate-100 shadow-sm relative top-[-6px]">
+                                    <div className="flex justify-between items-start mb-1">
+                                      <p className="text-xs font-bold text-slate-800">{t.description}</p>
+                                      <span className={`text-xs font-black ${t.pointsAdded > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        {t.pointsAdded > 0 ? `+${t.pointsAdded}` : `-${t.pointsDeducted}`}
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold mt-2">
+                                      <span>{new Date(t.date).toLocaleString()}</span>
+                                      <span className="font-bold text-slate-500">Bal: {t.runningBalance}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1412,6 +1695,7 @@ export default function AdminDashboard() {
                     { type: 'memberships', label: 'Membership Report' },
                     { type: 'rewards', label: 'Rewards Report' },
                     { type: 'referrals', label: 'Referral Report' },
+                    { type: 'loyalty', label: 'Loyalty Report' },
                     { type: 'auditlogs', label: 'Audit Log Report' }
                   ].map(e => (
                     <div 

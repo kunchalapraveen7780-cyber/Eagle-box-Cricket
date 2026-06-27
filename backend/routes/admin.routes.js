@@ -413,6 +413,7 @@ router.get("/loyalty-analytics", authenticateToken, requireAdmin, async (req, re
         id: true,
         name: true,
         email: true,
+        createdAt: true,
         userMemberships: {
           where: { status: 'ACTIVE' },
           select: { tier: true }
@@ -420,11 +421,113 @@ router.get("/loyalty-analytics", authenticateToken, requireAdmin, async (req, re
         lifetimeSavings: true,
         pointsBalance: true,
         bookings: {
-          where: { status: { in: ["CONFIRMED", "COMPLETED", "PAID"] } },
-          select: { amountPaid: true, status: true }
+          select: { amountPaid: true, status: true, pointsEarned: true, createdAt: true }
+        },
+        referralsGot: {
+          select: { pointsAwarded: true, createdAt: true }
+        },
+        referralsMade: {
+          select: { pointsAwarded: true, createdAt: true }
+        },
+        coupons: {
+          select: { discountAmount: true, isUsed: true, createdAt: true }
         }
       }
     });
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let pointsIssuedThisMonth = 0;
+    let pointsRedeemedThisMonth = 0; 
+    let couponsGeneratedThisMonth = 0;
+    let referralRewardsGivenThisMonth = 0;
+    let bookingRewardsGivenThisMonth = 0;
+    let newLoyaltyMembersThisMonth = rawUsers.filter(u => new Date(u.createdAt) >= startOfMonth).length;
+
+    const allCustomers = rawUsers.map(u => {
+      let bookingPointsEarned = 0;
+      let completedBookingsCount = 0;
+      
+      u.bookings.forEach(b => {
+        if (b.status === "CONFIRMED" || b.status === "COMPLETED" || b.status === "PAID") {
+          completedBookingsCount++;
+        }
+        bookingPointsEarned += (b.pointsEarned || 0);
+        
+        if (new Date(b.createdAt) >= startOfMonth) {
+          bookingRewardsGivenThisMonth += (b.pointsEarned || 0);
+          pointsIssuedThisMonth += (b.pointsEarned || 0);
+        }
+      });
+
+      let referralPointsEarned = 0;
+      u.referralsMade.forEach(r => {
+        referralPointsEarned += (r.pointsAwarded || 0);
+        if (new Date(r.createdAt) >= startOfMonth) {
+          referralRewardsGivenThisMonth += (r.pointsAwarded || 0);
+          pointsIssuedThisMonth += (r.pointsAwarded || 0);
+        }
+      });
+      u.referralsGot.forEach(r => {
+        referralPointsEarned += (r.pointsAwarded || 0);
+        if (new Date(r.createdAt) >= startOfMonth) {
+          referralRewardsGivenThisMonth += (r.pointsAwarded || 0);
+          pointsIssuedThisMonth += (r.pointsAwarded || 0);
+        }
+      });
+
+      const totalEarned = bookingPointsEarned + referralPointsEarned;
+      const currentPoints = u.pointsBalance || 0;
+      const totalRedeemed = Math.max(0, totalEarned - currentPoints);
+
+      let totalCouponValueRedeemed = 0;
+      u.coupons.forEach(c => {
+        if (c.isUsed) totalCouponValueRedeemed += c.discountAmount;
+        if (new Date(c.createdAt) >= startOfMonth) {
+          couponsGeneratedThisMonth++;
+          pointsRedeemedThisMonth += (c.discountAmount * 10);
+        }
+      });
+
+      const activities = [
+        ...u.bookings.filter(b => b.pointsEarned > 0).map(b => new Date(b.createdAt)),
+        ...u.referralsMade.map(r => new Date(r.createdAt)),
+        ...u.referralsGot.map(r => new Date(r.createdAt)),
+        ...u.coupons.map(c => new Date(c.createdAt))
+      ];
+      activities.sort((a, b) => b - a);
+      const lastActivity = activities.length > 0 ? activities[0].toISOString() : null;
+
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        createdAt: u.createdAt,
+        membership: u.userMemberships?.[0]?.tier || 'None',
+        completedBookingsCount,
+        bookingPointsEarned,
+        referralPointsEarned,
+        totalEarned,
+        currentPoints,
+        totalRedeemed,
+        totalCouponValueRedeemed,
+        lastActivity,
+        status: currentPoints > 0 ? 'Active' : 'Inactive',
+        couponsCount: u.coupons.length,
+        referralsCount: u.referralsMade.length + u.referralsGot.length
+      };
+    });
+
+    allCustomers.sort((a, b) => {
+      if (b.currentPoints !== a.currentPoints) return b.currentPoints - a.currentPoints;
+      if (b.completedBookingsCount !== a.completedBookingsCount) return b.completedBookingsCount - a.completedBookingsCount;
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
+    
+    allCustomers.forEach((c, idx) => c.rank = idx + 1);
+
+    const topCustomers = allCustomers.slice(0, 10);
 
     const tierDistribution = {
       NONE: rawUsers.filter(u => !u.userMemberships?.length).length,
@@ -435,50 +538,110 @@ router.get("/loyalty-analytics", authenticateToken, requireAdmin, async (req, re
     };
 
     const totalDiscountsGiven = rawUsers.reduce((sum, u) => sum + (u.lifetimeSavings || 0), 0);
+    const totalActivePoints = rawUsers.reduce((sum, u) => sum + (u.pointsBalance || 0), 0);
+    const totalPointsIssued = allCustomers.reduce((sum, c) => sum + c.totalEarned, 0);
 
-    // Map to include dynamic counts and sums
-    const mappedUsers = rawUsers.map(u => ({
-      ...u,
-      activeBookingsCount: u.bookings.length,
-      dynamicTotalSpent: u.bookings.reduce((sum, b) => sum + (b.amountPaid || 0), 0)
-    }));
+    const monthlyStats = {
+      pointsIssuedThisMonth,
+      pointsRedeemedThisMonth,
+      newLoyaltyMembersThisMonth,
+      couponsGeneratedThisMonth,
+      referralRewardsGivenThisMonth,
+      bookingRewardsGivenThisMonth
+    };
 
-    // Sort customers by Active Booking Count DESC, then Total Spend DESC
-    const sortedUsers = [...mappedUsers].sort((a, b) => {
-      if (b.activeBookingsCount !== a.activeBookingsCount) {
-        return b.activeBookingsCount - a.activeBookingsCount;
+    res.json({ 
+      tierDistribution, 
+      totalDiscountsGiven, 
+      totalActivePoints, 
+      totalPointsIssued,
+      allCustomers,
+      topCustomers,
+      monthlyStats
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Customer Loyalty History Timeline
+router.get("/loyalty-analytics/customer/:id/history", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        bookings: {
+          select: { pointsEarned: true, createdAt: true, slot: { include: { branch: true } } }
+        },
+        referralsGot: {
+          select: { pointsAwarded: true, createdAt: true, referrer: { select: { name: true } } }
+        },
+        referralsMade: {
+          select: { pointsAwarded: true, createdAt: true, referred: { select: { name: true } } }
+        },
+        coupons: {
+          select: { discountAmount: true, createdAt: true, code: true }
+        }
       }
-      if (b.dynamicTotalSpent !== a.dynamicTotalSpent) {
-        return b.dynamicTotalSpent - a.dynamicTotalSpent;
-      }
-      return (b.pointsBalance || 0) - (a.pointsBalance || 0);
     });
 
-    // Map to the format expected by the frontend
-    const topCustomers = sortedUsers.slice(0, 10).map(u => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      userMemberships: u.userMemberships,
-      totalSpent: u.dynamicTotalSpent,
-      pointsBalance: u.pointsBalance,
-      bookingCount: u.activeBookingsCount
-    }));
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Calculate total active points
-    const totalActivePoints = rawUsers.reduce((sum, u) => sum + (u.pointsBalance || 0), 0);
+    const timeline = [];
 
-    // Sum points awarded from Referral
-    const referrals = await prisma.referral.findMany({ select: { pointsAwarded: true } });
-    const totalReferralPoints = referrals.reduce((sum, r) => sum + r.pointsAwarded, 0);
-    
-    // Sum points earned from bookings
-    const bookings = await prisma.booking.findMany({ select: { pointsEarned: true } });
-    const totalBookingPoints = bookings.reduce((sum, b) => sum + (b.pointsEarned || 0), 0);
+    user.bookings.forEach(b => {
+      if (b.pointsEarned > 0) {
+        timeline.push({
+          date: b.createdAt,
+          description: `Slot Booking at ${b.slot?.branch?.name || 'Venue'}`,
+          pointsAdded: b.pointsEarned,
+          pointsDeducted: 0
+        });
+      }
+    });
 
-    const totalPointsIssued = totalReferralPoints + totalBookingPoints;
+    user.referralsGot.forEach(r => {
+      if (r.pointsAwarded > 0) {
+        timeline.push({
+          date: r.createdAt,
+          description: `Received Referral Bonus from ${r.referrer?.name || 'Friend'}`,
+          pointsAdded: r.pointsAwarded,
+          pointsDeducted: 0
+        });
+      }
+    });
 
-    res.json({ tierDistribution, totalDiscountsGiven, topCustomers, totalActivePoints, totalPointsIssued });
+    user.referralsMade.forEach(r => {
+      if (r.pointsAwarded > 0) {
+        timeline.push({
+          date: r.createdAt,
+          description: `Referred Friend (${r.referred?.name || 'User'})`,
+          pointsAdded: r.pointsAwarded,
+          pointsDeducted: 0
+        });
+      }
+    });
+
+    user.coupons.forEach(c => {
+      timeline.push({
+        date: c.createdAt,
+        description: `₹${c.discountAmount} Coupon Generated (${c.code})`,
+        pointsAdded: 0,
+        pointsDeducted: c.discountAmount * 10 
+      });
+    });
+
+    timeline.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    let balance = 0;
+    timeline.forEach(t => {
+      balance += t.pointsAdded;
+      balance -= t.pointsDeducted;
+      t.runningBalance = balance;
+    });
+
+    res.json(timeline.reverse());
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
@@ -888,50 +1051,82 @@ router.get("/export/:type", authenticateToken, requireAdmin, async (req, res) =>
       data = await prisma.referral.findMany({
         select: { id: true, referralCode: true, refereeEmail: true, status: true, pointsAwarded: true, createdAt: true }
       });
-    } else if (type === "auditlogs") {
-      data = await prisma.auditLog.findMany({
-        select: { id: true, adminName: true, actionType: true, userAffected: true, createdAt: true }
-      });
-    } else {
-      return res.status(400).json({ error: "Invalid export type" });
-    }
-
-    if (!data.length) {
-      return res.status(404).json({ error: "No data found" });
-    }
-
-    const flattenObject = (obj, prefix = '') => {
-      return Object.keys(obj).reduce((acc, k) => {
-        const pre = prefix.length ? prefix + '_' : '';
-        if (typeof obj[k] === 'object' && obj[k] !== null && !Array.isArray(obj[k]) && !(obj[k] instanceof Date)) {
-          Object.assign(acc, flattenObject(obj[k], pre + k));
+        } else if (type === "loyalty") {
+          const rawUsers = await prisma.user.findMany({
+            select: {
+              id: true, name: true, email: true, createdAt: true,
+              userMemberships: { where: { status: 'ACTIVE' }, select: { tier: true } },
+              pointsBalance: true,
+              bookings: { select: { pointsEarned: true } },
+              referralsGot: { select: { pointsAwarded: true } },
+              referralsMade: { select: { pointsAwarded: true } },
+              coupons: { select: { discountAmount: true, isUsed: true } }
+            }
+          });
+          data = rawUsers.map(u => {
+            const bookingPts = u.bookings.reduce((sum, b) => sum + (b.pointsEarned || 0), 0);
+            const refPts = u.referralsMade.reduce((sum, r) => sum + (r.pointsAwarded || 0), 0) + u.referralsGot.reduce((sum, r) => sum + (r.pointsAwarded || 0), 0);
+            const totalEarned = bookingPts + refPts;
+            const currentPts = u.pointsBalance || 0;
+            const totalRedeemed = Math.max(0, totalEarned - currentPts);
+            const couponsVal = u.coupons.filter(c => c.isUsed).reduce((sum, c) => sum + (c.discountAmount || 0), 0);
+            return {
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              membershipTier: u.userMemberships?.[0]?.tier || 'NONE',
+              totalEarned,
+              currentPoints: currentPts,
+              totalRedeemed,
+              totalCouponValueRedeemed: couponsVal,
+              joinedDate: u.createdAt
+            };
+          });
+        } else if (type === "auditlogs") {
+          data = await prisma.auditLog.findMany({
+            select: { id: true, adminName: true, actionType: true, userAffected: true, createdAt: true }
+          });
         } else {
-          acc[pre + k] = obj[k];
+          return res.status(400).json({ error: "Invalid export type" });
         }
-        return acc;
-      }, {});
-    };
 
-    const flatData = data.map(item => flattenObject(item));
+        if (!data.length) {
+          return res.status(404).json({ error: "No data found" });
+        }
 
-    if (format === 'pdf') {
-      try {
-        const doc = new PDFDocument({ margin: 30, size: 'A4' });
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${type}_report.pdf"`);
-
-        doc.pipe(res);
-
-        const reportNames = {
-          users: 'Users',
-          bookings: 'Booking',
-          revenue: 'Revenue',
-          memberships: 'Membership',
-          rewards: 'Rewards',
-          referrals: 'Referral',
-          auditlogs: 'Audit Log'
+        const flattenObject = (obj, prefix = '') => {
+          return Object.keys(obj).reduce((acc, k) => {
+            const pre = prefix.length ? prefix + '_' : '';
+            if (typeof obj[k] === 'object' && obj[k] !== null && !Array.isArray(obj[k]) && !(obj[k] instanceof Date)) {
+              Object.assign(acc, flattenObject(obj[k], pre + k));
+            } else {
+              acc[pre + k] = obj[k];
+            }
+            return acc;
+          }, {});
         };
+
+        const flatData = data.map(item => flattenObject(item));
+
+        if (format === 'pdf') {
+          try {
+            const doc = new PDFDocument({ margin: 30, size: 'A4' });
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${type}_report.pdf"`);
+
+            doc.pipe(res);
+
+            const reportNames = {
+              users: 'Users',
+              bookings: 'Booking',
+              revenue: 'Revenue',
+              memberships: 'Membership',
+              rewards: 'Rewards',
+              referrals: 'Referral',
+              loyalty: 'Loyalty',
+              auditlogs: 'Audit Log'
+            };
         const reportName = reportNames[type] || type;
 
         doc.fontSize(22).fillColor('#22C55E').text('EagleBox Cricket', { align: 'left' });
