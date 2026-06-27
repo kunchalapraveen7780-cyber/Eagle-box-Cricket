@@ -802,94 +802,41 @@ export default function LandingPage() {
       </nav>
 
       {/* 2. HERO SECTION */}
-      <section id="home" className="relative pt-16 pb-32 px-6 overflow-hidden bg-[#FAFAF7] border-b border-[#EEEDE8] min-h-[85vh] flex flex-col items-center justify-center">
-        {/* Subtle dot pattern and radial green glow */}
-        <div className="absolute inset-0 hero-dot-grid pointer-events-none opacity-40 z-0"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] hero-radial-glow pointer-events-none z-0"></div>
+      <section id="home" className="relative pt-16 pb-32 px-6 overflow-hidden min-h-[85vh] flex flex-col items-center justify-center bg-cover bg-center" style={{ backgroundImage: "url('/silhouette-bg.png')" }}>
+        
+        {/* Very light white gradient (15% opacity) behind the text to maintain artwork visibility */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-5xl h-full max-h-[600px] bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.15)_0%,_rgba(255,255,255,0)_70%)] pointer-events-none z-0"></div>
 
-        <div className="max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
+        <div className="max-w-4xl w-full mx-auto flex flex-col items-center justify-center relative z-10 fade-up text-center space-y-8">
           
-          {/* Left Column */}
-          <div className="lg:col-span-7 text-left space-y-8 fade-up">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#22C55E]/10 border border-[#22C55E]/20 rounded-full text-xs font-black text-[#16A34A] uppercase tracking-wider pulse-badge">
-              ⚡ Premium Cricket Tech
-            </div>
-            
-            <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-none text-[#1A1A1A] clamp-headline" style={{ fontSize: 'clamp(3rem, 7vw, 5.5rem)' }}>
-              Book. Play. <br />
-              <span className="text-[#22C55E]">Dominate.</span>
-            </h1>
-
-            <p className="text-base md:text-lg text-[#8A8A8A] font-medium max-w-xl leading-relaxed">
-              Experience box cricket on premium pitches. Instant slot booking under state-of-the-art shadowless floodlights. Register today and start earning loyalty reward points instantly.
-            </p>
-
-            <div className="flex flex-wrap gap-4 pt-2">
-              <button 
-                onClick={() => handleBookNowClick()} 
-                className="bg-[#22C55E] hover:bg-[#16A34A] text-white py-4 px-8 rounded-full font-bold shadow-lg shadow-green-500/20 hover:-translate-y-0.5 active:translate-y-0 transition-all text-base cursor-pointer btn-shine-sweep"
-              >
-                Book a Slot 🏏
-              </button>
-              <a 
-                href="#venues" 
-                onClick={(e) => handleAnchorClick(e, 'venues')} 
-                className="border-2 border-[#22C55E] text-[#22C55E] hover:bg-[#22C55E]/10 py-4 px-8 rounded-full font-bold hover:-translate-y-0.5 active:translate-y-0 transition-all text-base inline-block text-center"
-              >
-                View Venues
-              </a>
-            </div>
+          <div className="inline-flex items-center gap-2 px-5 py-2 bg-[#22C55E]/10 border border-[#22C55E]/20 rounded-full text-xs font-black text-[#16A34A] uppercase tracking-wider pulse-badge">
+            ⚡ Premium Cricket Tech
           </div>
+          
+          <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-none text-[#111111] clamp-headline" style={{ fontSize: 'clamp(3.5rem, 8vw, 6rem)' }}>
+            Book. Play. <br />
+            <span className="text-[#22C55E]">Dominate.</span>
+          </h1>
 
-          {/* Right Column: Floating confirmation card */}
-          <div className="lg:col-span-5 flex items-center justify-center fade-up">
-            <div className="relative w-full max-w-sm mx-auto floating-card hidden lg:block z-10">
-              <div className="bg-white border border-[#EEEDE8] rounded-[24px] shadow-xl overflow-hidden transform rotate-[-3deg]">
-                {/* Header */}
-                <div className="bg-[#22C55E] px-6 py-4 flex items-center justify-between text-white">
-                  <span className="font-extrabold text-sm tracking-wide">✓ SLOT CONFIRMED</span>
-                  <div className="text-[9px] bg-white/20 px-2.5 py-1 rounded-full font-black uppercase tracking-wider">
-                    Paid via UPI
-                  </div>
-                </div>
-                {/* Body */}
-                <div className="p-6 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[9px] text-[#8A8A8A] font-bold uppercase tracking-wider block">Venue</span>
-                      <span className="text-sm font-extrabold text-[#1A1A1A]">Eagle Box Indiranagar</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[9px] text-[#8A8A8A] font-bold uppercase tracking-wider block">Pitch</span>
-                      <span className="text-xs font-bold text-[#1A1A1A]">Arena Alpha (A)</span>
-                    </div>
-                  </div>
-                  
-                  <div className="border-t border-[#EEEDE8] pt-3 flex justify-between">
-                    <div>
-                      <span className="text-[9px] text-[#8A8A8A] font-bold uppercase tracking-wider block">Date</span>
-                      <span className="text-xs font-bold text-[#1A1A1A]">Saturday, 20 June</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[9px] text-[#8A8A8A] font-bold uppercase tracking-wider block">Time</span>
-                      <span className="text-xs font-bold text-[#1A1A1A]">07:00 PM - 08:00 PM</span>
-                    </div>
-                  </div>
+          <p className="text-base md:text-xl text-[#4B5563] font-medium max-w-2xl mx-auto leading-relaxed">
+            Experience box cricket on premium pitches. Instant slot booking under state-of-the-art shadowless floodlights. Register today and start earning loyalty reward points instantly.
+          </p>
 
-                  <div className="border-t border-[#EEEDE8] pt-3 flex justify-between items-center">
-                    <div>
-                      <span className="text-[9px] text-[#8A8A8A] font-bold uppercase tracking-wider block">Customer</span>
-                      <span className="text-xs font-bold text-[#1A1A1A]">John Doe</span>
-                    </div>
-                    <div className="bg-[#22C55E]/10 border border-[#22C55E]/20 text-[#16A34A] text-xs font-black px-3 py-1 rounded-xl">
-                      ₹900.00
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="flex flex-col sm:flex-row flex-wrap justify-center items-center gap-5 pt-4 w-full">
+            <button 
+              onClick={() => handleBookNowClick()} 
+              className="w-full sm:w-auto bg-[#22C55E] hover:bg-[#16A34A] text-white py-4 px-10 rounded-full font-bold shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:-translate-y-1 active:translate-y-0 transition-all text-lg cursor-pointer btn-shine-sweep"
+            >
+              Book a Slot 🏏
+            </button>
+            <a 
+              href="#venues" 
+              onClick={(e) => handleAnchorClick(e, 'venues')} 
+              className="w-full sm:w-auto border-2 border-[#22C55E] text-[#22C55E] hover:bg-[#22C55E]/10 py-4 px-10 rounded-full font-bold hover:-translate-y-1 active:translate-y-0 transition-all text-lg inline-block text-center shadow-sm"
+            >
+              View Venues
+            </a>
           </div>
-
         </div>
 
         {/* Stats counter bar */}
