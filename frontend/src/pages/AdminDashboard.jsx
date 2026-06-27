@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { 
-  DollarSign, IndianRupee, Calendar, Users, AlertCircle, LogOut, Loader2, TrendingUp, Download, Shield, MapPin, Award, Search, Menu, X, Clock, Activity, ListOrdered, Share2, Check, RefreshCw, MessageSquare, Bell, FileText, Table, Lock, Star
+  DollarSign, IndianRupee, Calendar, Users, AlertCircle, LogOut, Loader2, TrendingUp, Download, Shield, MapPin, Award, Search, Menu, X, Clock, Activity, ListOrdered, Share2, Check, RefreshCw, MessageSquare, Bell, FileText, Table, Lock, Star, ChevronLeft, ChevronRight, CheckCircle2, XCircle
 } from "lucide-react";
 import api from "../lib/api";
 import toast from "react-hot-toast";
