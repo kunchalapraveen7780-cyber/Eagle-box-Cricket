@@ -320,7 +320,7 @@ router.patch("/:bookingId/cancel", authenticateToken, async (req, res) => {
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { slot: true }
+      include: { slot: { include: { branch: true } } }
     });
 
     if (!booking) return res.status(404).json({ error: "Booking not found" });
@@ -346,17 +346,12 @@ router.patch("/:bookingId/cancel", authenticateToken, async (req, res) => {
         where: { id: booking.userId },
         data: {
           pointsBalance: { decrement: booking.pointsEarned },
-          totalSpent: { decrement: booking.amountPaid },
           lifetimeSavings: { decrement: booking.discountApplied }
         }
       });
 
-      if (booking.bookingType === "PREPAID" && booking.userMembershipId) {
-        await tx.userMembership.update({
-          where: { id: booking.userMembershipId },
-          data: { usedSlots: { decrement: 1 }, status: "ACTIVE" } // status back to ACTIVE if it was CONSUMED
-        });
-      }
+      // Note: Membership slots are intentionally NOT restored. They remain consumed.
+      // Note: totalSpent is intentionally NOT decremented, as the payment is non-refundable.
 
       await tx.notification.create({
         data: {
@@ -371,10 +366,33 @@ router.patch("/:bookingId/cancel", authenticateToken, async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: booking.userId } });
     if (user && user.email) {
       const { sendEmail } = require('../lib/email');
+      const venueName = booking.slot.branch?.name || "Eagle Box Cricket";
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; color: #111;">
+          <p>Hi ${user.name},</p>
+          <p>Your booking has been cancelled successfully.</p>
+          <h3 style="color: #22C55E;">Booking Details</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li><strong>Venue:</strong> ${venueName}</li>
+            <li><strong>Date:</strong> ${booking.slot.date}</li>
+            <li><strong>Time:</strong> ${booking.slot.startTime} – ${booking.slot.endTime}</li>
+            <li><strong>Booking Status:</strong> Cancelled</li>
+          </ul>
+          <h4>Important Information:</h4>
+          <ul>
+            <li>Your payment is <strong>NON-REFUNDABLE</strong> according to EagleBox Cricket's cancellation policy.</li>
+            <li>If this booking was made using a Membership Plan, the consumed membership slot has <strong>NOT</strong> been restored.</li>
+            <li>The cancelled pitch slot is now available for booking by other players.</li>
+          </ul>
+          <p>Thank you for choosing EagleBox Cricket.</p>
+          <p>Regards,<br/>EagleBox Team</p>
+        </div>
+      `;
+
       sendEmail({
         to: user.email,
-        subject: "Booking Cancelled - Eagle Box Cricket",
-        html: `<p>Hi ${user.name}, your booking for ${booking.slot.date} at ${booking.slot.startTime} has been cancelled.</p>`
+        subject: "Booking Cancelled - EagleBox Cricket",
+        html: htmlBody
       });
     }
 

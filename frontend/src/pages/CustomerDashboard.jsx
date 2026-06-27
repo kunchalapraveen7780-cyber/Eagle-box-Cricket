@@ -299,7 +299,7 @@ export default function CustomerDashboard() {
     if (!bookingToCancel) return;
     api.patch(`/api/bookings/${bookingToCancel.id}/cancel`)
       .then(() => {
-        toast.success("Booking cancelled successfully!");
+        toast.success("Booking cancelled successfully. No refund has been issued. Membership slots (if used) remain consumed.");
         setShowCancelModal(false);
         setBookingToCancel(null);
         
@@ -977,7 +977,11 @@ export default function CustomerDashboard() {
                               <span className="text-[10px] text-slate-400">{b.slot.startTime} - {b.slot.endTime}</span>
                             </td>
                             <td className="py-3 px-4 font-mono text-[10px] text-slate-500 uppercase tracking-wider">{b.id.substring(0, 8)}</td>
-                            <td className="py-3 px-4 font-bold text-slate-600">Refund Processed</td>
+                            <td className="py-3 px-4 font-bold">
+                              <span className="inline-block px-2 py-1 text-[10px] uppercase rounded-full tracking-wider bg-red-100 text-red-700">
+                                {b.bookingType === 'PREPAID' ? 'Membership Slot Used' : 'Paid • Non Refundable'}
+                              </span>
+                            </td>
                             <td className="py-3 px-4 text-xs text-slate-500">
                               {new Date(b.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </td>
@@ -1605,10 +1609,17 @@ export default function CustomerDashboard() {
             <div className="w-14 h-14 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-200">
               <Trash2 className="w-7 h-7" />
             </div>
-            <h3 className="text-xl font-black text-slate-900 tracking-tight">Cancel Reservation?</h3>
-            <p className="text-xs text-slate-500 mt-2 max-w-xs mx-auto leading-relaxed">
-              Are you sure you want to cancel your booking at <strong>{bookingToCancel.slot.branch?.name || 'Eagle Box Cricket'}</strong> on {new Date(bookingToCancel.slot.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ({bookingToCancel.slot.startTime})?
-            </p>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight">Cancel Booking?</h3>
+            <div className="text-xs text-slate-600 mt-4 text-left bg-red-50 p-4 rounded-xl border border-red-100">
+              <p className="font-bold mb-2">You are about to cancel this booking. Please note:</p>
+              <ul className="list-disc pl-4 space-y-1 text-slate-600 font-medium">
+                <li>This cancellation is permanent.</li>
+                <li>Your payment is NON-REFUNDABLE.</li>
+                <li>If this booking was made using a Membership Plan, the consumed membership slot WILL NOT be restored.</li>
+                <li>The booked pitch will become available for other players immediately after cancellation.</li>
+              </ul>
+              <p className="mt-3 font-bold text-center">Are you sure you want to continue?</p>
+            </div>
             <div className="grid grid-cols-2 gap-3 mt-6">
               <button 
                 onClick={() => {
@@ -1617,7 +1628,7 @@ export default function CustomerDashboard() {
                 }}
                 className="w-full bg-white hover:bg-slate-50 text-slate-700 font-bold py-2.5 rounded-xl border border-slate-200 text-xs transition-colors"
               >
-                No, Keep Booking
+                Cancel
               </button>
               <button 
                 onClick={handleConfirmCancel}
@@ -1673,6 +1684,31 @@ export default function CustomerDashboard() {
                 <span>Points Awarded</span>
                 <span className="text-yellow-600 font-bold">+{selectedBookingForView.pointsEarned} pts</span>
               </div>
+              
+              {/* Additional Cancel Details if Cancelled */}
+              {selectedBookingForView.status === 'CANCELLED' && (
+                <>
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span>Payment Status</span>
+                    <span className="text-slate-800 font-bold">Paid</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span>Refund Status</span>
+                    <span className="text-red-600 font-bold">Non Refundable</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span>Membership Used</span>
+                    <span className="text-slate-800 font-bold">{selectedBookingForView.bookingType === 'PREPAID' ? 'Yes' : 'No'}</span>
+                  </div>
+                  {selectedBookingForView.bookingType === 'PREPAID' && (
+                    <div className="flex justify-between border-b border-slate-100 pb-2">
+                      <span>Membership Slot Returned</span>
+                      <span className="text-red-600 font-bold">No</span>
+                    </div>
+                  )}
+                </>
+              )}
+
               <div className="flex justify-between">
                 <span>Booking Status</span>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
