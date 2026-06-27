@@ -802,10 +802,8 @@ export default function LandingPage() {
       </nav>
 
       {/* 2. HERO SECTION */}
-      <section id="home" className="relative pt-16 pb-32 px-6 overflow-hidden min-h-[85vh] flex flex-col items-center justify-center bg-cover bg-center" style={{ backgroundImage: "url('/silhouette-bg.png')" }}>
+      <section id="home" className="relative pt-16 pb-32 px-6 overflow-hidden min-h-[85vh] flex flex-col items-center justify-center bg-no-repeat bg-center bg-[#F3F9F1]" style={{ backgroundImage: "url('/silhouette-bg.png')", backgroundSize: 'contain' }}>
         
-        {/* Very light white gradient (15% opacity) behind the text to maintain artwork visibility */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-5xl h-full max-h-[600px] bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.15)_0%,_rgba(255,255,255,0)_70%)] pointer-events-none z-0"></div>
 
         <div className="max-w-4xl w-full mx-auto flex flex-col items-center justify-center relative z-10 fade-up text-center space-y-8">
           
