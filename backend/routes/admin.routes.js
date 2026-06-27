@@ -135,7 +135,8 @@ router.get("/bookings/daily", authenticateToken, requireAdmin, async (req, res) 
       },
       include: {
         user: { select: { name: true, email: true, phone: true } },
-        slot: { include: { branch: true } }
+        slot: { include: { branch: true } },
+        userMembership: true
       },
       orderBy: { slot: { startTime: 'asc' } }
     });

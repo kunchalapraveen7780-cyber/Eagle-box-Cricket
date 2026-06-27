@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { 
-  DollarSign, Calendar, Users, AlertCircle, LogOut, Loader2, TrendingUp, Download, Shield, MapPin, Award, Search, Menu, X, Clock, Activity, ListOrdered, Share2, Check, RefreshCw, MessageSquare, Bell, FileText, Table, Lock, Star
+  DollarSign, IndianRupee, Calendar, Users, AlertCircle, LogOut, Loader2, TrendingUp, Download, Shield, MapPin, Award, Search, Menu, X, Clock, Activity, ListOrdered, Share2, Check, RefreshCw, MessageSquare, Bell, FileText, Table, Lock, Star
 } from "lucide-react";
 import api from "../lib/api";
 import toast from "react-hot-toast";
@@ -317,7 +317,7 @@ export default function AdminDashboard() {
                     { label: "Completed Bookings", value: stats.completedBookings || 0, icon: Check, color: "emerald" },
                     { label: "Cancelled Bookings", value: stats.cancelledBookings || 0, icon: X, color: "red" },
                     { label: "Today's Bookings", value: stats.todaysBookings || 0, icon: Calendar, color: "orange" },
-                    { label: "Monthly Rev.", value: `₹${(stats.monthlyRevenue || 0).toLocaleString()}`, icon: DollarSign, color: "green" },
+                    { label: "Monthly Rev.", value: `₹${(stats.monthlyRevenue || 0).toLocaleString()}`, icon: IndianRupee, color: "green" },
                     { label: "Active Grounds", value: stats.activeVenues || 0, icon: MapPin, color: "teal" },
                     { label: "Slots Today", value: stats.totalSlotsToday || 0, icon: Clock, color: "slate" },
                     { label: "Booked Slots", value: stats.bookedSlotsToday || 0, icon: ListOrdered, color: "emerald" },
@@ -528,7 +528,20 @@ export default function AdminDashboard() {
                               <td className="py-4 px-4 text-sm font-bold text-slate-800">
                                 {b.user?.name}
                               </td>
-                              <td className="py-4 px-4 text-sm font-black text-slate-800">₹{b.amountPaid}</td>
+                              <td className="py-4 px-4 text-sm font-black text-slate-800">
+                                {b.bookingType === 'PREPAID' && b.userMembership?.tier ? (
+                                  <span className={`inline-block px-2 py-1 text-[10px] uppercase rounded-full tracking-wider border ${
+                                    b.userMembership.tier.toUpperCase() === 'STARTER' ? 'bg-green-50 text-green-700 border-green-200' :
+                                    b.userMembership.tier.toUpperCase() === 'PRO' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                    b.userMembership.tier.toUpperCase() === 'ELITE' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                    'bg-slate-50 text-slate-700 border-slate-200'
+                                  }`}>
+                                    {b.userMembership.tier} Membership Used
+                                  </span>
+                                ) : (
+                                  `₹${b.amountPaid}`
+                                )}
+                              </td>
                               <td className="py-4 px-4 text-right">
                                 <span className={`inline-block px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-wider ${
                                   b.status === 'CONFIRMED' || b.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
@@ -643,7 +656,7 @@ export default function AdminDashboard() {
               <div className="space-y-8 animate-in fade-in duration-500">
                 {!stats || stats.totalRevenue === 0 ? (
                   <div className="bg-white p-12 rounded-3xl border border-[#EEEDE8] shadow-sm text-center">
-                    <DollarSign className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                    <IndianRupee className="w-16 h-16 text-slate-200 mx-auto mb-4" />
                     <h3 className="text-xl font-black text-slate-800">No revenue records available yet.</h3>
                     <p className="text-sm text-slate-500 mt-2">Bookings must be paid and confirmed to appear here.</p>
                   </div>
