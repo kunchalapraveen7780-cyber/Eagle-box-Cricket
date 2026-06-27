@@ -102,13 +102,36 @@ export default function AdminDashboard() {
   }, [activeTab, navigate, selectedDate]);
 
   useEffect(() => {
-    const initialLoad = setTimeout(() => {
-      loadActiveTabData();
-    }, 0);
-    const interval = setInterval(loadActiveTabData, 30000); // 30s refresh for active tab
+    loadActiveTabData();
+    
+    // Real-time WebSocket connection for instant updates
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socketUrl = `${protocol}//${window.location.hostname}:5000`;
+    let ws;
+    let reconnectTimeout;
+
+    const connectWebSocket = () => {
+      ws = new WebSocket(socketUrl);
+      ws.onmessage = () => {
+        // Any broadcast means state changed (booking created, cancelled, membership purchased, etc)
+        loadActiveTabData();
+      };
+      ws.onclose = () => {
+        reconnectTimeout = setTimeout(connectWebSocket, 5000);
+      };
+    };
+    connectWebSocket();
+
+    // Fallback polling
+    const interval = setInterval(loadActiveTabData, 30000);
+
     return () => {
-      clearTimeout(initialLoad);
       clearInterval(interval);
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null; // Prevent reconnect loop on unmount
+        ws.close();
+      }
     };
   }, [loadActiveTabData]);
 

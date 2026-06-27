@@ -35,11 +35,13 @@ router.get("/dashboard-stats", authenticateToken, requireAdmin, async (req, res)
     const [
       totalUsers,
       activeMembers,
-      totalBookings, // Active
+      activeBookings, // Active
       todaysBookings,
       activeVenues,
       bookedSlotsTodayCount,
       monthlyBookings,
+      monthlyMemberships,
+      allMemberships,
       cancelledBookings,
       completedBookingsCount
     ] = await Promise.all([
@@ -49,32 +51,44 @@ router.get("/dashboard-stats", authenticateToken, requireAdmin, async (req, res)
           userMemberships: { some: { status: "ACTIVE" } }
         }
       }),
-      prisma.booking.count({ where: { status: { in: ["CONFIRMED", "COMPLETED", "PAID"] } } }),
+      prisma.booking.count({ where: { status: { in: ["CONFIRMED", "PENDING"] } } }), // Active Bookings
       prisma.booking.count({
         where: {
-          slot: { date: todayStr },
-          status: { in: ["CONFIRMED", "COMPLETED", "PAID"] }
+          slot: { date: todayStr }
         }
-      }),
+      }), // Today's Bookings
       prisma.branch.count(),
       prisma.booking.count({
         where: {
           slot: { date: todayStr },
-          status: { in: ["CONFIRMED", "COMPLETED", "PAID"] }
+          status: { in: ["CONFIRMED", "COMPLETED", "PENDING"] }
         }
-      }),
+      }), // Booked Slots Today
       prisma.booking.findMany({
         where: {
           createdAt: { gte: firstDayOfMonth },
-          status: { in: ["CONFIRMED", "COMPLETED", "PAID"] }
+          status: { not: "CANCELLED" }
         },
         select: { amountPaid: true }
-      }),
+      }), // Normal Bookings for Revenue
+      prisma.userMembership.findMany({
+        where: { purchaseDate: { gte: firstDayOfMonth } },
+        select: { tier: true }
+      }), // Membership purchases for Revenue
+      prisma.membership.findMany(), // All membership plans to get pricing
       prisma.booking.count({ where: { status: "CANCELLED" } }),
       prisma.booking.count({ where: { status: "COMPLETED" } })
     ]);
 
-    const monthlyRevenue = monthlyBookings.reduce((sum, b) => sum + b.amountPaid, 0);
+    // Calculate Membership Revenue
+    const membershipPrices = {};
+    allMemberships.forEach(m => {
+      membershipPrices[m.name.toUpperCase()] = m.price;
+    });
+    const membershipRevenue = monthlyMemberships.reduce((sum, m) => sum + (membershipPrices[m.tier] || 0), 0);
+    const bookingsRevenue = monthlyBookings.reduce((sum, b) => sum + b.amountPaid, 0);
+    const monthlyRevenue = bookingsRevenue + membershipRevenue;
+
     const totalSlotsToday = activeVenues * 16;
     const bookedSlotsToday = bookedSlotsTodayCount;
     const availableSlotsToday = Math.max(0, totalSlotsToday - bookedSlotsToday);
@@ -83,7 +97,7 @@ router.get("/dashboard-stats", authenticateToken, requireAdmin, async (req, res)
     res.json({
       totalUsers,
       activeMembers,
-      totalBookings,
+      totalBookings: activeBookings,
       todaysBookings,
       monthlyRevenue,
       activeVenues,
