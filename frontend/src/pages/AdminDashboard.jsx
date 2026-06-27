@@ -34,6 +34,12 @@ export default function AdminDashboard() {
   // Search/Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  
+  // Bookings Daily Dashboard states
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString('en-CA'));
+  const [selectedVenueFilter, setSelectedVenueFilter] = useState("ALL");
+  const [dailyBookingStats, setDailyBookingStats] = useState(null);
+  const [selectedBookingDetails, setSelectedBookingDetails] = useState(null);
 
   const loadActiveTabData = useCallback(async () => {
     try {
@@ -50,8 +56,9 @@ export default function AdminDashboard() {
         const res = await api.get("/api/admin/users");
         setUsers(res.data);
       } else if (activeTab === "bookings") {
-        const res = await api.get("/api/admin/bookings");
-        setBookings(res.data);
+        const res = await api.get(`/api/admin/bookings/daily?date=${selectedDate}`);
+        setBookings(res.data.bookings);
+        setDailyBookingStats(res.data.stats);
       } else if (activeTab === "locks") {
         const res = await api.get('/api/slots/admin/slot-locks');
         setSlotLocks(res.data);
@@ -92,7 +99,7 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, navigate]);
+  }, [activeTab, navigate, selectedDate]);
 
   useEffect(() => {
     const initialLoad = setTimeout(() => {
@@ -250,15 +257,26 @@ export default function AdminDashboard() {
     </div>
   );
 
+  const handlePrevDay = () => {
+    const date = new Date(selectedDate);
+    date.setDate(date.getDate() - 1);
+    setSelectedDate(date.toLocaleDateString('en-CA'));
+  };
+
+  const handleNextDay = () => {
+    const date = new Date(selectedDate);
+    date.setDate(date.getDate() + 1);
+    setSelectedDate(date.toLocaleDateString('en-CA'));
+  };
+
+  const handleToday = () => {
+    setSelectedDate(new Date().toLocaleDateString('en-CA'));
+  };
+
+  const uniqueVenues = [...new Set(bookings.map(b => b.slot?.branch?.name).filter(Boolean))];
+
   const filteredBookings = bookings.filter(b => {
-    if (statusFilter !== "ALL" && b.status !== statusFilter) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return b.id.toLowerCase().includes(q) || 
-             b.user?.name?.toLowerCase().includes(q) || 
-             b.user?.email?.toLowerCase().includes(q) ||
-             b.slot?.branch?.name?.toLowerCase().includes(q);
-    }
+    if (selectedVenueFilter !== "ALL" && b.slot?.branch?.name !== selectedVenueFilter) return false;
     return true;
   });
 
@@ -397,76 +415,133 @@ export default function AdminDashboard() {
 
             {/* TAB: BOOKINGS */}
             {activeTab === "bookings" && (
-              <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm animate-in fade-in duration-500">
-                <div className="flex flex-wrap gap-4 justify-between items-center mb-6">
-                  <h3 className="text-base font-black tracking-tight">Booking Management</h3>
-                  <div className="flex gap-3">
-                    <div className="relative">
-                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input 
-                        type="text" 
-                        placeholder="Search bookings..." 
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#22C55E]"
-                      />
-                    </div>
-                    <select 
-                      value={statusFilter}
-                      onChange={e => setStatusFilter(e.target.value)}
-                      className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold bg-white outline-none"
+              <div className="space-y-6 animate-in fade-in duration-500">
+                {/* Header / Date Picker */}
+                <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+                  <h3 className="text-xl font-black tracking-tight text-slate-800">Daily Operations</h3>
+                  
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button 
+                      onClick={handlePrevDay}
+                      className="px-3 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 font-bold text-slate-600 transition-colors"
                     >
-                      <option value="ALL">All Status</option>
-                      <option value="CONFIRMED">Confirmed</option>
-                      <option value="PENDING">Pending</option>
-                      <option value="CANCELLED">Cancelled</option>
+                      &larr; Prev
+                    </button>
+                    
+                    <input 
+                      type="date" 
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-[#22C55E] bg-slate-50"
+                    />
+                    
+                    <button 
+                      onClick={handleNextDay}
+                      className="px-3 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 font-bold text-slate-600 transition-colors"
+                    >
+                      Next &rarr;
+                    </button>
+
+                    <button 
+                      onClick={handleToday}
+                      className="px-4 py-2 bg-[#22C55E]/10 text-[#16A34A] rounded-xl font-bold hover:bg-[#22C55E]/20 transition-colors"
+                    >
+                      Today
+                    </button>
+
+                    <select 
+                      value={selectedVenueFilter}
+                      onChange={(e) => setSelectedVenueFilter(e.target.value)}
+                      className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-bold bg-white outline-none min-w-[140px]"
+                    >
+                      <option value="ALL">All Venues</option>
+                      {uniqueVenues.map(venue => (
+                        <option key={venue} value={venue}>{venue}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-100">
-                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Booking ID</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">User</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Venue & Time</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Amount</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Status</th>
-                        <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredBookings.map(b => (
-                        <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-4 text-[10px] font-mono text-slate-500">{b.id.substring(0,8).toUpperCase()}</td>
-                          <td className="py-3 px-4 text-xs font-bold text-slate-800">{b.user?.name}<br/><span className="text-[10px] text-slate-400 font-normal">{b.user?.email}</span></td>
-                          <td className="py-3 px-4 text-xs text-slate-700">
-                            <strong>{b.slot?.branch?.name || 'Eagle Box'}</strong><br/>
-                            {b.slot?.date} • {b.slot?.startTime}
-                          </td>
-                          <td className="py-3 px-4 text-xs font-bold text-green-600">₹{b.amountPaid}</td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-1 text-[9px] font-black rounded uppercase ${
-                              b.status === 'CONFIRMED' || b.status === 'COMPLETED' ? 'bg-green-50 text-green-700' :
-                              b.status === 'PENDING' ? 'bg-yellow-50 text-yellow-700' :
-                              'bg-red-50 text-red-700'
-                            }`}>{b.status}</span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <select 
-                              value={b.status}
-                              onChange={(e) => handleStatusChange(b.id, e.target.value)}
-                              className="text-[10px] font-bold border border-slate-200 rounded p-1 outline-none"
-                            >
-                              <option value="CONFIRMED">CONFIRM</option>
-                              <option value="PENDING">PENDING</option>
-                              <option value="CANCELLED">CANCEL</option>
-                            </select>
-                          </td>
+
+                {/* Summary Cards */}
+                {dailyBookingStats && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                    <div className="bg-white p-4 rounded-2xl border border-[#EEEDE8] shadow-sm flex flex-col items-center text-center">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">🏏 Total Slots</div>
+                      <div className="text-2xl font-black text-slate-800">{dailyBookingStats.totalSlots}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-[#EEEDE8] shadow-sm flex flex-col items-center text-center">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">✅ Booked</div>
+                      <div className="text-2xl font-black text-slate-800">{dailyBookingStats.bookedSlots}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-[#EEEDE8] shadow-sm flex flex-col items-center text-center">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">🟢 Available</div>
+                      <div className="text-2xl font-black text-slate-800">{dailyBookingStats.availableSlots}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-red-100 shadow-sm flex flex-col items-center text-center bg-red-50/30">
+                      <div className="text-[10px] font-bold text-red-400 uppercase mb-1">❌ Cancelled</div>
+                      <div className="text-2xl font-black text-red-600">{dailyBookingStats.cancelled}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-[#EEEDE8] shadow-sm flex flex-col items-center text-center">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">💰 Revenue</div>
+                      <div className="text-xl font-black text-green-600">₹{dailyBookingStats.revenue.toLocaleString()}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-[#EEEDE8] shadow-sm flex flex-col items-center text-center">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">👥 Customers</div>
+                      <div className="text-2xl font-black text-slate-800">{dailyBookingStats.customers}</div>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm flex flex-col items-center text-center bg-blue-50/30">
+                      <div className="text-[10px] font-bold text-blue-400 uppercase mb-1">📈 Occupancy</div>
+                      <div className="text-2xl font-black text-blue-600">{dailyBookingStats.occupancy}%</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bookings Table */}
+                <div className="bg-white p-6 rounded-3xl border border-[#EEEDE8] shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100">
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Time</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Venue</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Customer</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase">Amount</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-400 uppercase text-right">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredBookings.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" className="py-8 text-center text-slate-400 font-bold text-sm">No bookings found for this date.</td>
+                          </tr>
+                        ) : (
+                          filteredBookings.map(b => (
+                            <tr 
+                              key={b.id} 
+                              onClick={() => setSelectedBookingDetails(b)}
+                              className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors"
+                            >
+                              <td className="py-4 px-4 text-sm font-black text-slate-800">{b.slot?.startTime} – {b.slot?.endTime}</td>
+                              <td className="py-4 px-4 text-sm font-bold text-slate-600">{b.slot?.branch?.name || 'Eagle Box'}</td>
+                              <td className="py-4 px-4 text-sm font-bold text-slate-800">
+                                {b.user?.name}
+                              </td>
+                              <td className="py-4 px-4 text-sm font-black text-slate-800">₹{b.amountPaid}</td>
+                              <td className="py-4 px-4 text-right">
+                                <span className={`inline-block px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-wider ${
+                                  b.status === 'CONFIRMED' || b.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                                  b.status === 'PENDING' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {b.status === 'CONFIRMED' ? 'UPCOMING' : b.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -1223,6 +1298,66 @@ export default function AdminDashboard() {
           </div>
         </main>
       </div>
+
+      {/* Booking Details Modal */}
+      {selectedBookingDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setSelectedBookingDetails(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="text-xl font-black text-slate-800">Booking Details</h3>
+              <button onClick={() => setSelectedBookingDetails(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status</span>
+                <span className={`px-3 py-1 text-xs font-black rounded-full uppercase tracking-wider ${
+                  selectedBookingDetails.status === 'CONFIRMED' || selectedBookingDetails.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                  selectedBookingDetails.status === 'PENDING' ? 'bg-blue-100 text-blue-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  {selectedBookingDetails.status === 'CONFIRMED' ? 'UPCOMING' : selectedBookingDetails.status}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Customer</div>
+                <div className="text-base font-black text-slate-800">{selectedBookingDetails.user?.name}</div>
+                <div className="text-sm font-semibold text-slate-500">{selectedBookingDetails.user?.email}</div>
+                <div className="text-sm font-semibold text-slate-500">{selectedBookingDetails.user?.phone}</div>
+              </div>
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Match Details</div>
+                <div className="text-sm font-bold text-slate-700 flex justify-between">
+                  <span>Venue:</span>
+                  <span className="text-slate-900">{selectedBookingDetails.slot?.branch?.name || 'Eagle Box'}</span>
+                </div>
+                <div className="text-sm font-bold text-slate-700 flex justify-between">
+                  <span>Date:</span>
+                  <span className="text-slate-900">{selectedBookingDetails.slot?.date}</span>
+                </div>
+                <div className="text-sm font-bold text-slate-700 flex justify-between">
+                  <span>Time:</span>
+                  <span className="text-slate-900">{selectedBookingDetails.slot?.startTime} – {selectedBookingDetails.slot?.endTime}</span>
+                </div>
+              </div>
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Payment</div>
+                <div className="text-sm font-bold text-slate-700 flex justify-between">
+                  <span>Amount Paid:</span>
+                  <span className="text-green-600 font-black">₹{selectedBookingDetails.amountPaid}</span>
+                </div>
+                {selectedBookingDetails.notes && (
+                  <div className="mt-4 p-3 bg-slate-50 rounded-xl text-sm text-slate-600 font-medium">
+                    <span className="block text-xs font-bold text-slate-400 uppercase mb-1">Notes</span>
+                    {selectedBookingDetails.notes}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -123,6 +123,62 @@ router.get("/users", authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+// Get bookings and summary stats for a specific date
+router.get("/bookings/daily", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ error: "Date is required" });
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        slot: { date }
+      },
+      include: {
+        user: { select: { name: true, email: true, phone: true } },
+        slot: { include: { branch: true } }
+      },
+      orderBy: { slot: { startTime: 'asc' } }
+    });
+
+    const activeVenues = await prisma.branch.count();
+    const totalSlotsToday = activeVenues * 16; // Assuming 16 slots per venue
+
+    let bookedSlotsCount = 0;
+    let cancelledCount = 0;
+    let revenue = 0;
+    const customers = new Set();
+
+    bookings.forEach(b => {
+      if (b.status === 'CANCELLED') {
+        cancelledCount++;
+      } else {
+        bookedSlotsCount++;
+        revenue += b.amountPaid;
+        if (b.userId) customers.add(b.userId);
+      }
+    });
+
+    const availableSlots = Math.max(0, totalSlotsToday - bookedSlotsCount);
+    const occupancyRate = totalSlotsToday > 0 ? ((bookedSlotsCount / totalSlotsToday) * 100).toFixed(1) : 0;
+
+    res.json({
+      bookings,
+      stats: {
+        totalSlots: totalSlotsToday,
+        bookedSlots: bookedSlotsCount,
+        availableSlots,
+        cancelled: cancelledCount,
+        revenue,
+        customers: customers.size,
+        occupancy: occupancyRate
+      }
+    });
+  } catch (err) {
+    console.error("Daily Bookings Error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // List all bookings for admin dashboard
 router.get("/bookings", authenticateToken, requireAdmin, async (req, res) => {
   try {
