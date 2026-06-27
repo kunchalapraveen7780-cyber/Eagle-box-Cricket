@@ -78,16 +78,20 @@ router.post("/", authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "Unauthorized to review this booking" });
     }
 
-    // Must be confirmed (our system considers played bookings as confirmed)
-    if (booking.status !== "CONFIRMED") {
-      return res.status(400).json({ error: "Can only review confirmed bookings" });
-    }
+    const isDemoMode = process.env.DEMO_MODE === 'true';
 
-    // Match End Time has passed
-    const now = new Date();
-    const matchEndTime = new Date(`${booking.slot.date}T${booking.slot.endTime}`);
-    if (matchEndTime > now) {
-      return res.status(400).json({ error: "Can only review bookings that have already completed" });
+    if (!isDemoMode) {
+      // Must be confirmed or completed
+      if (booking.status !== "CONFIRMED" && booking.status !== "COMPLETED") {
+        return res.status(400).json({ error: "Can only review confirmed or completed bookings" });
+      }
+
+      // Match End Time has passed
+      const now = new Date();
+      const matchEndTime = new Date(`${booking.slot.date}T${booking.slot.endTime}`);
+      if (matchEndTime > now) {
+        return res.status(400).json({ error: "Can only review bookings that have already completed" });
+      }
     }
 
     const existing = await prisma.review.findUnique({
