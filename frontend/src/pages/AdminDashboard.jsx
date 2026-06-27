@@ -53,7 +53,8 @@ export default function AdminDashboard() {
         ]);
         setStats(statsRes.data);
         setTopCustomers(topRes.data.topCustomers || []);
-        setVenueAnalytics(venueRes.data);
+        setVenueAnalytics(venueRes.data.branches || []);
+        setVenueSummary(venueRes.data.summary || null);
       } else if (activeTab === "users") {
         const res = await api.get("/api/admin/users");
         setUsers(res.data);
