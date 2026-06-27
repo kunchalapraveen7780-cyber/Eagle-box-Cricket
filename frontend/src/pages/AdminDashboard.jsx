@@ -273,7 +273,9 @@ export default function AdminDashboard() {
     setSelectedDate(new Date().toLocaleDateString('en-CA'));
   };
 
-  const uniqueVenues = [...new Set(bookings.map(b => b.slot?.branch?.name).filter(Boolean))];
+  const uniqueVenues = venueAnalytics && venueAnalytics.length > 0 
+    ? venueAnalytics.map(v => v.name) 
+    : ['Arena Alpha', 'Arena Beta', 'Kukatpally', 'Madhapur', 'Gachibowli', 'Uppal'];
 
   const filteredBookings = bookings.filter(b => {
     if (selectedVenueFilter !== "ALL" && b.slot?.branch?.name !== selectedVenueFilter) return false;
