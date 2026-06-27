@@ -1,6 +1,9 @@
+import { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Toaster } from "react-hot-toast";
+import { AnimatePresence, motion } from "framer-motion";
+import PremiumLoader from "./components/PremiumLoader";
 import LandingPage from "./pages/LandingPage";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -15,13 +18,30 @@ import MembershipSuccess from "./pages/MembershipSuccess";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID";
 
 function App() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <Toaster position="top-right" />
-      <Router>
-        <div className="min-h-screen flex flex-col">
-          <main className="flex-grow">
-            <Routes>
+      <AnimatePresence mode="wait">
+        {isLoading ? (
+          <PremiumLoader key="loader" />
+        ) : (
+          <motion.div
+            key="app-content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          >
+            <Router>
+              <div className="min-h-screen flex flex-col">
+                <main className="flex-grow">
+                  <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/venues" element={<VenuesPage />} />
               <Route path="/venues/:id" element={<VenueDetailsPage />} />
@@ -43,6 +63,9 @@ function App() {
           </main>
         </div>
       </Router>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </GoogleOAuthProvider>
   );
 }

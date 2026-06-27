@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { 
   MapPin, Trophy, Zap, Gift, Check, ChevronDown, Star, Calendar
 } from 'lucide-react';
@@ -821,12 +822,15 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row flex-wrap justify-center items-center gap-5 pt-4 w-full">
-            <button 
+            <motion.button 
+              initial={{ boxShadow: "0 0 0 0 rgba(34,197,94,0)" }}
+              animate={{ boxShadow: ["0 0 0 0 rgba(34,197,94,1)", "0 0 0 40px rgba(34,197,94,0)"] }}
+              transition={{ duration: 1, ease: "easeOut" }}
               onClick={() => handleBookNowClick()} 
-              className="w-full sm:w-auto bg-[#22C55E] hover:bg-[#16A34A] text-white py-4 px-10 rounded-full font-bold shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:-translate-y-1 active:translate-y-0 transition-all text-lg cursor-pointer btn-shine-sweep"
+              className="relative z-20 w-full sm:w-auto bg-[#22C55E] hover:bg-[#16A34A] text-white py-4 px-10 rounded-full font-bold shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:-translate-y-1 active:translate-y-0 transition-all text-lg cursor-pointer btn-shine-sweep"
             >
               Book a Slot 🏏
-            </button>
+            </motion.button>
             <a 
               href="#venues" 
               onClick={(e) => handleAnchorClick(e, 'venues')} 
