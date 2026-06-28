@@ -17,7 +17,7 @@ router.get("/", async (req, res) => {
       whereClause.branchId = branchId;
     }
 
-    const slots = await prisma.slot.findMany({
+    let slots = await prisma.slot.findMany({
       where: whereClause,
       include: {
         slotLocks: {
@@ -29,6 +29,55 @@ router.get("/", async (req, res) => {
         { startTime: 'asc' }
       ]
     });
+
+    // Automatic Slot Generation for future dates
+    if (slots.length === 0 && date && branchId) {
+      const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+      if (branch) {
+        const schedule = [
+          { s: "06:00 AM", e: "07:00 AM" },
+          { s: "07:00 AM", e: "08:00 AM" },
+          { s: "08:00 AM", e: "09:00 AM" },
+          { s: "09:00 AM", e: "10:00 AM" },
+          { s: "10:00 AM", e: "11:00 AM" },
+          { s: "11:00 AM", e: "12:00 PM" },
+          { s: "12:00 PM", e: "01:00 PM" },
+          { s: "01:00 PM", e: "02:00 PM" },
+          { s: "02:00 PM", e: "03:00 PM" },
+          { s: "03:00 PM", e: "04:00 PM" },
+          { s: "04:00 PM", e: "05:00 PM" },
+          { s: "05:00 PM", e: "06:00 PM" },
+          { s: "06:00 PM", e: "07:00 PM" },
+          { s: "07:00 PM", e: "08:00 PM" },
+          { s: "08:00 PM", e: "09:00 PM" },
+          { s: "09:00 PM", e: "10:00 PM" }
+        ];
+
+        const newSlotsData = schedule.map(time => ({
+          date: date,
+          startTime: time.s,
+          endTime: time.e,
+          price: branch.pricePerHour,
+          status: 'AVAILABLE',
+          branchId: branch.id
+        }));
+
+        await prisma.slot.createMany({ data: newSlotsData });
+
+        slots = await prisma.slot.findMany({
+          where: whereClause,
+          include: {
+            slotLocks: {
+              where: { expiresAt: { gt: new Date() } }
+            }
+          },
+          orderBy: [
+            { date: 'asc' },
+            { startTime: 'asc' }
+          ]
+        });
+      }
+    }
 
     // Deduplicate slots based on startTime to prevent duplicates on frontend
     const uniqueSlotsMap = new Map();

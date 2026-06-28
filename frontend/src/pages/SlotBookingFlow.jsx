@@ -75,7 +75,7 @@ export default function SlotBookingFlow() {
   const [datesList] = useState(() => {
     const dates = [];
     const today = new Date();
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 30; i++) {
       const nextDate = new Date(today);
       nextDate.setDate(today.getDate() + i);
       const dayName = nextDate.toLocaleDateString('en-US', { weekday: 'short' });
