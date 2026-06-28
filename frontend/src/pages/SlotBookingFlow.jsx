@@ -205,6 +205,7 @@ export default function SlotBookingFlow() {
         setBooking(prev => ({ ...prev, slotId: '', time: '', amount: 0 }));
         setLockTimer(-1);
         setStep(2); // go back to slot selection
+        fetchSlots(true); // refresh to show slot is available again
       }, 0);
       return () => window.clearTimeout(resetTimer);
     }
@@ -219,26 +220,62 @@ export default function SlotBookingFlow() {
     }
   };
 
-  useEffect(() => {
-    if (booking.date) {
-      const loadingTimer = window.setTimeout(() => setLoadingSlots(true), 0);
-      const url = booking.branch?.id 
-        ? `/api/slots?date=${booking.date}&branchId=${booking.branch.id}` 
-        : `/api/slots?date=${booking.date}`;
-      api.get(url)
-        .then(res => {
-          setSlots(res.data || []);
-        })
-        .catch(err => {
-          console.error("Error fetching slots:", err);
-          setSlots([]);
-        })
-        .finally(() => {
-          setLoadingSlots(false);
-        });
-      return () => window.clearTimeout(loadingTimer);
+  const fetchAbortControllerRef = React.useRef(null);
+
+  const fetchSlots = React.useCallback(async (isBackground = false) => {
+    if (!booking.date) return;
+    
+    if (!isBackground) {
+      setSlots([]);
+      setLoadingSlots(true);
     }
-  }, [booking.date, booking.branch?.id, booking.branch?.pricePerHour]);
+
+    if (fetchAbortControllerRef.current) {
+      fetchAbortControllerRef.current.abort();
+    }
+    
+    const controller = new AbortController();
+    fetchAbortControllerRef.current = controller;
+
+    const url = booking.branch?.id 
+      ? `/api/slots?date=${booking.date}&branchId=${booking.branch.id}` 
+      : `/api/slots?date=${booking.date}`;
+      
+    try {
+      const res = await api.get(url, { signal: controller.signal });
+      const newSlots = res.data || [];
+      
+      const uniqueMap = new Map();
+      newSlots.forEach(slot => {
+        if (!uniqueMap.has(slot.startTime) || slot.status !== 'AVAILABLE') {
+          uniqueMap.set(slot.startTime, slot);
+        }
+      });
+      setSlots(Array.from(uniqueMap.values()));
+    } catch (err) {
+      if (err.name !== 'CanceledError' && err.message !== 'canceled') {
+        console.error("Error fetching slots:", err);
+        if (!isBackground) setSlots([]);
+      }
+    } finally {
+      if (!isBackground) setLoadingSlots(false);
+    }
+  }, [booking.date, booking.branch?.id]);
+
+  useEffect(() => {
+    fetchSlots(false);
+
+    const interval = setInterval(() => {
+      fetchSlots(true);
+    }, 15000);
+
+    return () => {
+      clearInterval(interval);
+      if (fetchAbortControllerRef.current) {
+        fetchAbortControllerRef.current.abort();
+      }
+    };
+  }, [fetchSlots]);
 
   useEffect(() => {
     api.get('/api/branches')
@@ -439,9 +476,11 @@ export default function SlotBookingFlow() {
 
       toast.success("Reservation confirmed!");
       setStep(6);
+      fetchSlots(true); // Trigger explicit refresh after successful booking
     } catch (err) {
       toast.dismiss();
       toast.error(err.response?.data?.error || err.message || 'Failed to complete reservation. Try another slot.');
+      fetchSlots(true); // Refresh slots in case the slot was snatched
     } finally {
       setIsConfirming(false);
     }

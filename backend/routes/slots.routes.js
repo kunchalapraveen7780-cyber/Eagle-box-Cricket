@@ -30,7 +30,20 @@ router.get("/", async (req, res) => {
       ]
     });
 
-    const slotsWithLockStatus = slots.map(slot => {
+    // Deduplicate slots based on startTime to prevent duplicates on frontend
+    const uniqueSlotsMap = new Map();
+    
+    slots.forEach(slot => {
+      // If we haven't seen this startTime yet, or if the current slot is BOOKED/LOCKED 
+      // (preferring booked/locked over an errant duplicate AVAILABLE slot)
+      if (!uniqueSlotsMap.has(slot.startTime) || slot.status !== 'AVAILABLE') {
+        uniqueSlotsMap.set(slot.startTime, slot);
+      }
+    });
+
+    const uniqueSlots = Array.from(uniqueSlotsMap.values());
+
+    const slotsWithLockStatus = uniqueSlots.map(slot => {
       if (slot.status === 'AVAILABLE' && slot.slotLocks && slot.slotLocks.length > 0) {
         return { ...slot, status: 'LOCKED', lockedBy: slot.slotLocks[0].userId };
       }
